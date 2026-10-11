@@ -1,0 +1,117 @@
+rules_version = '2';
+// ============================================================
+// KOVELI STAFF PORTAL - database rules
+// Paste this whole file into Firebase console > Firestore Database > Rules > Publish.
+// Nobody can read or write anything without signing in through the portal.
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function uid() { return request.auth.uid; }
+    function me() { return get(/databases/$(database)/documents/staff/$(request.auth.uid)).data; }
+    function active() { return request.auth != null && me().get('active', true) != false; }
+    function role() { return me().get('role', 'Staff').lower(); }
+    function isAdmin() { return active() && role() in ['admin', 'administrator']; }
+    function isManager() { return active() && role() in ['admin', 'administrator', 'supervisor', 'sup']; }
+    function roleKey() {
+      return role() in ['admin', 'administrator'] ? 'admin'
+           : (role() in ['supervisor', 'sup'] ? 'supervisor' : 'staff');
+    }
+
+    // Staff profiles: everyone signed in can see names; only Admin changes them.
+    match /staff/{id} {
+      allow read: if active();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin() && id != uid();
+    }
+
+    // Login codes and wrong-try counters: server only.
+    match /staffSecrets/{id} { allow read, write: if false; }
+    match /loginAttempts/{id} { allow read, write: if false; }
+
+    match /settings/{id} { allow read: if active(); allow write: if isAdmin(); }
+    match /holidays/{id} { allow read: if active(); allow write: if isAdmin(); }
+
+    // Sick leave and FRL.
+    match /leaveRequests/{id} {
+      allow read: if active() && (resource.data.staffId == uid() || isManager());
+      allow create: if active()
+                    && request.resource.data.staffId == uid()
+                    && request.resource.data.status == 'pending';
+      allow update: if isAdmin()
+                    || (active()
+                        && resource.data.staffId == uid()
+                        && resource.data.status == 'pending'
+                        && request.resource.data.staffId == uid()
+                        && request.resource.data.status == 'cancelled');
+      allow delete: if isAdmin();
+    }
+
+    // Annual leave: everyone sees the calendar; staff add and cancel their own pending requests.
+    match /annualLeaveRequests/{id} {
+      allow read: if active();
+      allow create: if isAdmin()
+                    || (active()
+                        && request.resource.data.staffId == uid()
+                        && request.resource.data.status == 'pending');
+      allow update: if isAdmin()
+                    || (active()
+                        && resource.data.staffId == uid()
+                        && resource.data.status == 'pending'
+                        && request.resource.data.staffId == uid()
+                        && request.resource.data.status == 'cancelled');
+      allow delete: if isAdmin();
+    }
+
+    // Duty changes: the two people involved, plus Supervisors and Admin.
+    match /dutyChanges/{id} {
+      allow read: if active()
+                  && (resource.data.requesterId == uid()
+                      || resource.data.acceptStaffId == uid()
+                      || resource.data.status == 'approved'   // approved swaps show on everyone's roster
+                      || isManager());
+      allow create: if active()
+                    && request.resource.data.requesterId == uid()
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.get('staffAccepted', false) == false;
+      allow update: if isAdmin()
+                    || (active()
+                        && resource.data.status == 'pending'
+                        && resource.data.requesterId == uid()
+                        && request.resource.data.requesterId == uid()
+                        && request.resource.data.status == 'cancelled')
+                    || (active()
+                        && resource.data.status == 'pending'
+                        && resource.data.acceptStaffId == uid()
+                        && request.resource.data.acceptStaffId == uid()
+                        && request.resource.data.requesterId == resource.data.requesterId
+                        && request.resource.data.status in ['pending', 'rejected']);
+      allow delete: if isAdmin();
+    }
+
+    // Inbox: written by the server only; you can read what was sent to you or to your role.
+    match /portalNotifications/{id} {
+      allow read: if active()
+                  && (uid() in resource.data.recipientIds
+                      || roleKey() in resource.data.recipientRoles
+                      || isAdmin());
+      allow create, update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // A phone or browser registers itself for alerts under the signed-in person.
+    match /pushDevices/{id} {
+      allow read: if false;
+      allow create, update: if active() && request.resource.data.staffId == uid();
+      allow delete: if active() && resource.data.staffId == uid();
+    }
+
+    // Roster: everyone signed in can view; Supervisors and Admin build and publish.
+    match /dutyRosters/{id} { allow read: if active(); allow write: if isManager(); }
+    match /rosterStaff/{id} { allow read: if active(); allow write: if isManager(); }
+    match /rosterOfficerRules/{id} { allow read: if active(); allow write: if isManager(); }
+    match /rosterOfficerAutoConfig/{id} { allow read: if active(); allow write: if isManager(); }
+    match /rosterConfig/{id} { allow read: if active(); allow write: if isManager(); }
+    match /systemControl/{id} { allow read: if active(); allow write: if isManager(); }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Koveli Staff Portal",
+  "short_name": "Koveli",
+  "description": "Roster, leave and duty changes for Koveli Lounge staff.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EEF4F3",
+  "theme_color": "#0E2A33",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

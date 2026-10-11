@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Annual leave | Koveli staff portal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E2A33">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=3">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js?v=3"></script>
+</head>
+<body>
+<main class="page">
+  <div class="page-head">
+    <div><h1>Annual leave</h1><p>See who is away, pick your dates and send them to Admin. Fridays, Saturdays and public holidays are not counted as leave days.</p></div>
+  </div>
+
+  <div class="cols">
+    <section class="panel">
+      <div class="panel-head">
+        <div class="btn-row" style="align-items:center">
+          <button class="btn sm" id="prev" type="button" aria-label="Previous month">‹</button>
+          <h2 id="monthTitle" style="min-width:150px;text-align:center"></h2>
+          <button class="btn sm" id="next" type="button" aria-label="Next month">›</button>
+          <button class="btn sm" id="thisMonth" type="button">This month</button>
+        </div>
+        <div class="seg"><button type="button" id="vCal" class="on">Calendar</button><button type="button" id="vStaff">By staff</button></div>
+      </div>
+      <div class="panel-body">
+        <div class="scroll" id="calWrap"><div class="cal" id="cal"></div></div>
+        <div class="scroll" id="staffWrap" hidden><table class="grid" id="staffTable"></table></div>
+        <div class="legend" style="margin-top:12px">
+          <span><i style="background:#fff"></i>Free</span><span><i style="background:var(--amber-soft)"></i>Some away</span><span><i style="background:var(--red-soft)"></i>Full</span>
+          <span><i style="background:#e9eeee"></i>Friday or Saturday</span><span><i style="background:#efe6f6"></i>Holiday</span><span><i style="box-shadow:inset 0 0 0 2px var(--teal)"></i>Your leave</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="stack">
+      <section class="panel">
+        <div class="panel-head"><h2>Ask for leave</h2></div>
+        <div class="panel-body form">
+          <p class="hint">Tap a first and a last day on the calendar, or type the dates.</p>
+          <div class="form-2">
+            <label class="field"><span>First day</span><input type="date" id="start"></label>
+            <label class="field"><span>Last day</span><input type="date" id="end"></label>
+          </div>
+          <div class="note" id="count">Choose your first and last day.</div>
+          <label class="field"><span>Note for Admin (optional)</span><textarea id="reason" rows="2"></textarea></label>
+          <div class="btn-row"><button class="btn primary" id="send" type="button">Send to Admin</button><button class="btn" id="clear" type="button">Clear dates</button></div>
+        </div>
+      </section>
+      <section class="panel"><div class="panel-head"><h2>My annual leave</h2><p id="mySum"></p></div><div class="rows" id="mine"></div></section>
+    </div>
+  </div>
+
+  <div id="adminArea" hidden style="margin-top:16px">
+    <div class="cols even">
+      <section class="panel"><div class="panel-head"><h2>Waiting for approval</h2></div><div class="rows" id="pending"></div></section>
+      <section class="panel"><div class="panel-head"><h2>Approved leave</h2><p>Coming up, newest first</p></div><div class="rows" id="approved" style="max-height:420px;overflow:auto"></div></section>
+      <section class="panel">
+        <div class="panel-head"><h2>Give leave to a staff member</h2></div>
+        <div class="panel-body form">
+          <label class="field"><span>Staff member</span><select id="aStaff"></select></label>
+          <div class="form-2"><label class="field"><span>First day</span><input type="date" id="aStart"></label><label class="field"><span>Last day</span><input type="date" id="aEnd"></label></div>
+          <div class="note" id="aCount">Choose the dates.</div>
+          <button class="btn primary" id="aGive" type="button">Give this leave</button>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Holidays and limits</h2></div>
+        <div class="panel-body form">
+          <div class="form-2"><label class="field"><span>Holiday date</span><input type="date" id="hDate"></label><label class="field"><span>Holiday name</span><input type="text" id="hName" placeholder="National Day"></label></div>
+          <button class="btn" id="hAdd" type="button">Add holiday</button>
+          <div class="rows" id="holidays" style="border:1px solid var(--line);border-radius:6px;max-height:200px;overflow:auto"></div>
+          <div class="form-2" style="align-items:end"><label class="field"><span>Most staff on leave on one day</span><input type="number" id="cap" min="1" max="50"></label><button class="btn" id="capSave" type="button">Save limit</button></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+(async function () {
+  "use strict";
+  const { esc, id } = K;
+  const me = await K.start();
+  if (!me) return;
+
+  let requests = [], holidays = [], staff = [], capacity = 2, view = "cal";
+  let month = K.parse(K.today()); month.setDate(1);
+  const st = K.statusOf;
+
+  // ---- date helpers ----
+  const range = (a, b) => { const out = []; if (!a || !b || b < a) return out; for (let d = a; d <= b && out.length < 400; d = K.addDays(d, 1)) out.push(d); return out; };
+  const holidayOn = d => holidays.find(h => h.date === d);
+  const weekend = d => { const day = K.parse(d).getDay(); return day === 5 || day === 6; };
+  const working = d => !weekend(d) && !holidayOn(d);
+  const details = (a, b) => { const all = range(a, b); return { all, work: all.filter(working), weekend: all.filter(weekend), holiday: all.filter(d => !weekend(d) && holidayOn(d)) }; };
+  const days = r => Number.isFinite(Number(r.workingDays)) ? Number(r.workingDays) : details(r.startDate, r.endDate).work.length;
+  const approved = () => requests.filter(r => st(r) === "approved");
+  const awayOn = d => working(d) ? approved().filter(r => r.startDate <= d && r.endDate >= d) : [];
+  const fullDays = (list, skipId) => list.filter(d => new Set(awayOn(d).filter(r => r.id !== skipId).map(r => r.staffId)).size >= capacity);
+  const overlaps = (staffId, a, b, skipId) => requests.some(r => r.id !== skipId && String(r.staffId) === String(staffId) && ["pending", "approved"].includes(st(r)) && r.startDate <= b && r.endDate >= a);
+  const sentence = d => `${d.work.length} leave day${d.work.length === 1 ? "" : "s"}. ${d.all.length} calendar days, ${d.weekend.length} Friday or Saturday and ${d.holiday.length} holiday${d.holiday.length === 1 ? "" : "s"} not counted.`;
+
+  // ---- drawing ----
+  function draw() {
+    id("monthTitle").textContent = month.toLocaleString("en-GB", { month: "long", year: "numeric" });
+    view === "cal" ? drawCal() : drawStaff();
+    id("calWrap").hidden = view !== "cal"; id("staffWrap").hidden = view !== "staff";
+  }
+
+  function drawCal() {
+    const y = month.getFullYear(), m = month.getMonth(), last = new Date(y, m + 1, 0).getDate(), lead = new Date(y, m, 1).getDay();
+    const a = id("start").value, b = id("end").value, picked = a && b ? range(a, b) : (a ? [a] : []);
+    let html = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => `<div class="cal-head">${d}</div>`).join("") + '<div class="cal-day blank"></div>'.repeat(lead);
+    for (let d = 1; d <= last; d++) {
+      const date = K.iso(new Date(y, m, d)), away = awayOn(date), h = holidayOn(date), n = new Set(away.map(r => r.staffId)).size;
+      const cls = weekend(date) ? "off" : h ? "holiday" : n >= capacity ? "full" : n ? "some" : "";
+      const mine = away.some(r => String(r.staffId) === me.id);
+      const text = weekend(date) ? "Not counted" : h ? esc(h.name) : n ? away.slice(0, 3).map(r => esc(String(r.staffName || "").split(" ")[0])).join(", ") + (n > 3 ? ` +${n - 3}` : "") : "";
+      html += `<button type="button" class="cal-day ${cls}${mine ? " mine" : ""}${picked.includes(date) ? " picked" : ""}" data-d="${date}" title="${esc(away.map(r => r.staffName).join(", "))}"><b>${d}</b><small>${!weekend(date) && !h ? `${n} of ${capacity} away` : ""}</small><small>${text}</small></button>`;
+    }
+    id("cal").innerHTML = html;
+    id("cal").querySelectorAll("[data-d]").forEach(el => el.onclick = () => pick(el.dataset.d));
+  }
+
+  function drawStaff() {
+    const y = month.getFullYear(), m = month.getMonth(), last = new Date(y, m + 1, 0).getDate(), today = K.today();
+    let head = '<thead><tr><th class="stick">Staff</th>';
+    for (let d = 1; d <= last; d++) { const date = K.iso(new Date(y, m, d)); head += `<th class="${date === today ? "today" : weekend(date) ? "weekend" : ""}">${d}<small>${K.parse(date).toLocaleString("en-GB", { weekday: "short" }).slice(0, 2)}</small></th>`; }
+    const people = staff.filter(s => s.active !== false);
+    const body = people.map(s => {
+      let row = `<tr class="${s.id === me.id ? "mine" : ""}"><td class="stick" title="${esc(s.name)}">${esc(s.name)}</td>`;
+      for (let d = 1; d <= last; d++) {
+        const date = K.iso(new Date(y, m, d));
+        const r = approved().find(r => String(r.staffId) === String(s.id) && r.startDate <= date && r.endDate >= date);
+        let cell = "";
+        if (r) cell = working(date) ? `<span class="duty dALEAVE" title="Annual leave">${details(r.startDate, date).work.length}</span>` : `<span class="duty dOFF" title="Inside the leave, not counted">0</span>`;
+        else if (holidayOn(date)) cell = `<span class="duty dCUSTOM" title="${esc(holidayOn(date).name)}">H</span>`;
+        row += `<td class="cell${weekend(date) && !r ? " dim" : ""}">${cell}</td>`;
+      }
+      return row + "</tr>";
+    }).join("");
+    id("staffTable").innerHTML = head + "</tr></thead><tbody>" + body + "</tbody>";
+  }
+
+  function pick(date) {
+    const a = id("start"), b = id("end");
+    if (!a.value || b.value) { a.value = date; b.value = ""; }
+    else if (date < a.value) { b.value = a.value; a.value = date; }
+    else b.value = date;
+    if (K.isAdmin) id("hDate").value = date;
+    counts(); drawCal();
+  }
+
+  function counts() {
+    const a = id("start").value, b = id("end").value, box = id("count");
+    box.className = "note";
+    if (!a || !b) { box.textContent = "Choose your first and last day."; return; }
+    if (b < a) { box.className = "note bad"; box.textContent = "The last day is before the first day."; return; }
+    box.textContent = sentence(details(a, b));
+  }
+  function adminCounts() {
+    const a = id("aStart").value, b = id("aEnd").value;
+    id("aCount").textContent = !a || !b ? "Choose the dates." : b < a ? "The last day is before the first day." : sentence(details(a, b));
+  }
+
+  function lists() {
+    const mine = requests.filter(r => String(r.staffId) === me.id).sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)));
+    const year = K.today().slice(0, 4), inYear = mine.filter(r => String(r.startDate).startsWith(year));
+    id("mySum").textContent = `${inYear.filter(r => st(r) === "approved").reduce((n, r) => n + days(r), 0)} days approved and ${inYear.filter(r => st(r) === "pending").reduce((n, r) => n + days(r), 0)} waiting in ${year}`;
+    id("mine").innerHTML = mine.map(r => `<div class="row"><div class="row-main"><b>${esc(K.fmt(r.startDate))} to ${esc(K.fmt(r.endDate))}</b><span>${days(r)} leave days${r.source === "admin" ? ". Given by Admin" : ""}${r.reason ? ". " + esc(r.reason) : ""}${r.reviewReason ? ". Admin said: " + esc(r.reviewReason) : ""}</span></div>
+      <div class="row-side">${K.tag(st(r))}${st(r) === "pending" ? `<button class="btn sm danger" data-cancel="${esc(r.id)}" type="button">Cancel</button>` : ""}</div></div>`).join("") || `<div class="empty">You have no annual leave yet.</div>`;
+    id("mine").querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => K.busy(b, () => cancel(b.dataset.cancel)));
+    if (!K.isAdmin) return;
+
+    id("adminArea").hidden = false;
+    const pend = requests.filter(r => st(r) === "pending").sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+    id("pending").innerHTML = pend.map(r => `<div class="row"><div class="row-main"><b>${esc(r.staffName)}</b><span>${esc(K.fmt(r.startDate))} to ${esc(K.fmt(r.endDate))}, ${days(r)} leave days${r.reason ? ". " + esc(r.reason) : ""}</span></div>
+      <div class="row-side"><button class="btn sm good" data-ok="${esc(r.id)}" type="button">Approve</button><button class="btn sm danger" data-no="${esc(r.id)}" type="button">Reject</button></div></div>`).join("") || `<div class="empty">No requests are waiting.</div>`;
+    id("pending").querySelectorAll("[data-ok]").forEach(b => b.onclick = () => K.busy(b, () => review(b.dataset.ok, "approved")));
+    id("pending").querySelectorAll("[data-no]").forEach(b => b.onclick = () => K.busy(b, () => review(b.dataset.no, "rejected")));
+
+    const today = K.today();
+    const coming = approved().filter(r => r.endDate >= today).sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+    id("approved").innerHTML = coming.map(r => `<div class="row"><div class="row-main"><b>${esc(r.staffName)}</b><span>${esc(K.fmt(r.startDate))} to ${esc(K.fmt(r.endDate))}, ${days(r)} leave days${r.source === "admin" ? ". Given by Admin" : ""}</span></div>
+      <div class="row-side"><button class="btn sm danger" data-revoke="${esc(r.id)}" type="button">Cancel leave</button></div></div>`).join("") || `<div class="empty">No approved leave is coming up.</div>`;
+    id("approved").querySelectorAll("[data-revoke]").forEach(b => b.onclick = () => K.busy(b, () => revoke(b.dataset.revoke)));
+
+    const old = id("aStaff").value;
+    id("aStaff").innerHTML = `<option value="">Choose a staff member</option>` + staff.filter(s => s.active !== false).map(s => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.rcno)})</option>`).join("");
+    id("aStaff").value = old;
+    id("cap").value = capacity;
+    id("holidays").innerHTML = [...holidays].sort((a, b) => String(a.date).localeCompare(String(b.date))).map(h => `<div class="row" style="padding:8px 12px"><div class="row-main"><b>${esc(K.fmt(h.date))}</b><span>${esc(h.name)}</span></div><div class="row-side"><button class="btn sm danger" data-h="${esc(h.id)}" type="button">Remove</button></div></div>`).join("") || `<div class="empty">No holidays added.</div>`;
+    id("holidays").querySelectorAll("[data-h]").forEach(b => b.onclick = () => K.busy(b, async () => { await K.db.collection("holidays").doc(b.dataset.h).delete(); await load(); }));
+  }
+
+  // ---- actions ----
+  const mail = (subject, r, extra) => ({ kind: "annual", subject: `Annual leave ${subject} - ${r.staffName} - ${r.startDate} to ${r.endDate}`, staffIds: [r.staffId],
+    message: [`ANNUAL LEAVE ${subject.toUpperCase()}`, "----------------------------------------", `Staff: ${r.staffName} (${r.staffRcno || r.staffId})`, `From: ${K.fmt(r.startDate)}`, `To: ${K.fmt(r.endDate)}`, `Leave days: ${days(r)}`, r.reason ? `Note: ${r.reason}` : "", extra || "", "----------------------------------------", "Koveli staff portal"].filter(Boolean).join("\n") });
+
+  async function submit() {
+    const a = id("start").value, b = id("end").value;
+    if (!a || !b) return K.toast("Choose your first and last day.", "bad");
+    if (b < a) return K.toast("The last day is before the first day.", "bad");
+    if (a < K.today()) return K.toast("The first day has already passed.", "bad");
+    const d = details(a, b);
+    if (!d.work.length) return K.toast("Those dates have no working days in them.", "bad");
+    if (overlaps(me.id, a, b)) return K.toast("You already have leave that overlaps these dates.", "bad");
+    const full = fullDays(d.work);
+    if (full.length) return K.toast(`Too many staff are already away on ${full.slice(0, 3).map(x => K.fmt(x)).join(", ")}${full.length > 3 ? " and more" : ""}.`, "bad");
+    const r = { staffId: me.id, staffName: me.name, staffRcno: me.rcno, startDate: a, endDate: b, workingDays: d.work.length, reason: id("reason").value.trim(), source: "staff", status: "pending", createdAt: K.stamp() };
+    const ref = await K.db.collection("annualLeaveRequests").add(r);
+    await K.notify({ recipientRoles: ["admin"], title: "Annual leave request", detail: `${me.name}: ${K.fmt(a)} to ${K.fmt(b)}, ${d.work.length} leave days.`, url: "annual.html", type: "annual", sourceId: ref.id, email: mail("requested", r) });
+    id("start").value = id("end").value = id("reason").value = "";
+    K.toast("Sent to Admin. It appears on the calendar once approved.", "ok"); await load();
+  }
+
+  async function fresh(requestId, wanted) {
+    const snap = await K.db.collection("annualLeaveRequests").doc(requestId).get();
+    if (!snap.exists || st(snap.data()) !== wanted) { K.toast("This request was changed a moment ago. The list has been refreshed.", "bad"); await load(); return null; }
+    return { id: requestId, ...snap.data() };
+  }
+
+  async function cancel(requestId) {
+    const r = await fresh(requestId, "pending"); if (!r) return;
+    if (!(await K.confirm(`Cancel your request for ${K.fmt(r.startDate)} to ${K.fmt(r.endDate)}?`, { ok: "Cancel the request", danger: true }))) return;
+    await K.db.collection("annualLeaveRequests").doc(requestId).update({ status: "cancelled", cancelledAt: K.stamp() });
+    await K.notify({ recipientRoles: ["admin"], title: "Annual leave request cancelled", detail: `${me.name} cancelled ${K.fmt(r.startDate)} to ${K.fmt(r.endDate)}.`, url: "annual.html", type: "annual", sourceId: requestId, email: mail("cancelled", r) });
+    K.toast("Request cancelled.", "ok"); await load();
+  }
+
+  async function review(requestId, status) {
+    const r = await fresh(requestId, "pending"); if (!r) return;
+    let reviewReason = "";
+    if (status === "approved") {
+      const full = fullDays(details(r.startDate, r.endDate).work, requestId);
+      if (full.length) return K.toast(`Cannot approve: too many staff are away on ${full.slice(0, 3).map(x => K.fmt(x)).join(", ")}.`, "bad");
+    } else { reviewReason = await K.ask(`Why is ${r.staffName}'s request rejected? They will see this.`, { ok: "Reject the request", title: "Reject annual leave" }); if (reviewReason === null) return; }
+    await K.db.collection("annualLeaveRequests").doc(requestId).update({ status, reviewReason, reviewedBy: me.name, reviewedAt: K.stamp() });
+    await K.notify({ recipientIds: [r.staffId], title: `Annual leave ${status}`, detail: `${K.fmt(r.startDate)} to ${K.fmt(r.endDate)} was ${status} by ${me.name}.${reviewReason ? " Reason: " + reviewReason : ""}`, url: "annual.html", type: "annual", sourceId: requestId, email: mail(status, r, reviewReason ? `Reason: ${reviewReason}` : "") });
+    K.toast(`Request ${status}.`, "ok"); await load();
+  }
+
+  async function revoke(requestId) {
+    const r = await fresh(requestId, "approved"); if (!r) return;
+    if (!(await K.confirm(`Cancel ${r.staffName}'s approved leave, ${K.fmt(r.startDate)} to ${K.fmt(r.endDate)}? The dates become free again.`, { ok: "Cancel the leave", danger: true }))) return;
+    await K.db.collection("annualLeaveRequests").doc(requestId).update({ status: "cancelled", cancelledBy: me.name, cancelledAt: K.stamp() });
+    await K.notify({ recipientIds: [r.staffId], title: "Annual leave cancelled by Admin", detail: `Your leave ${K.fmt(r.startDate)} to ${K.fmt(r.endDate)} was cancelled by ${me.name}.`, url: "annual.html", type: "annual", sourceId: requestId, email: mail("cancelled by Admin", r) });
+    K.toast("Leave cancelled.", "ok"); await load();
+  }
+
+  async function give() {
+    const staffId = id("aStaff").value, a = id("aStart").value, b = id("aEnd").value;
+    const person = staff.find(s => s.id === staffId);
+    if (!person) return K.toast("Choose a staff member.", "bad");
+    if (!a || !b || b < a) return K.toast("Choose a first and last day.", "bad");
+    const d = details(a, b);
+    if (!d.work.length) return K.toast("Those dates have no working days in them.", "bad");
+    if (overlaps(staffId, a, b)) return K.toast(`${person.name} already has leave that overlaps these dates.`, "bad");
+    const full = fullDays(d.work);
+    if (full.length && !(await K.confirm(`${full.length} of these days are already full (${full.slice(0, 3).map(x => K.fmt(x)).join(", ")}). Give the leave anyway?`, { ok: "Give anyway" }))) return;
+    const r = { staffId, staffName: person.name, staffRcno: person.rcno, startDate: a, endDate: b, workingDays: d.work.length, reason: "", source: "admin", status: "approved", reviewedBy: me.name, createdAt: K.stamp(), reviewedAt: K.stamp() };
+    const ref = await K.db.collection("annualLeaveRequests").add(r);
+    await K.notify({ recipientIds: [staffId], title: "Annual leave given", detail: `${me.name} gave you leave from ${K.fmt(a)} to ${K.fmt(b)}, ${d.work.length} leave days.`, url: "annual.html", type: "annual", sourceId: ref.id, email: mail("given by Admin", r) });
+    id("aStart").value = id("aEnd").value = ""; adminCounts();
+    K.toast("Leave given.", "ok"); await load();
+  }
+
+  async function load() {
+    const [reqs, hols, people, settings] = await Promise.all([K.load.annual(), K.db.collection("holidays").get(), K.staff(), K.settings()]);
+    requests = reqs.filter(r => r.startDate && r.endDate);
+    holidays = hols.docs.map(d => ({ id: d.id, ...d.data() })).filter(h => h.date);
+    staff = people; capacity = Math.max(1, Number(settings.annualCapacity) || 2);
+    draw(); lists(); counts();
+  }
+
+  // ---- wiring ----
+  const move = n => { month = new Date(month.getFullYear(), month.getMonth() + n, 1); draw(); };
+  id("prev").onclick = () => move(-1); id("next").onclick = () => move(1);
+  id("thisMonth").onclick = () => { month = K.parse(K.today()); month.setDate(1); draw(); };
+  id("vCal").onclick = () => { view = "cal"; id("vCal").classList.add("on"); id("vStaff").classList.remove("on"); draw(); };
+  id("vStaff").onclick = () => { view = "staff"; id("vStaff").classList.add("on"); id("vCal").classList.remove("on"); draw(); };
+  id("start").onchange = id("end").onchange = () => { counts(); if (view === "cal") drawCal(); };
+  id("clear").onclick = () => { id("start").value = id("end").value = ""; counts(); draw(); };
+  id("send").onclick = () => K.busy(id("send"), submit);
+  id("aStart").onchange = id("aEnd").onchange = adminCounts;
+  id("aGive").onclick = () => K.busy(id("aGive"), give);
+  id("hAdd").onclick = () => K.busy(id("hAdd"), async () => {
+    const date = id("hDate").value, name = id("hName").value.trim();
+    if (!date || !name) return K.toast("Choose the date and type the holiday name.", "bad");
+    if (holidayOn(date)) return K.toast("There is already a holiday on that date.", "bad");
+    await K.db.collection("holidays").add({ date, name, createdAt: K.stamp() });
+    id("hName").value = ""; K.toast("Holiday added.", "ok"); await load();
+  });
+  id("capSave").onclick = () => K.busy(id("capSave"), async () => {
+    const n = Number(id("cap").value);
+    if (!Number.isFinite(n) || n < 1) return K.toast("The limit must be at least 1.", "bad");
+    await K.db.collection("settings").doc("portal").set({ annualCapacity: n }, { merge: true });
+    await K.settings(true); K.toast("Limit saved.", "ok"); await load();
+  });
+
+  try { await load(); } catch (e) { id("cal").innerHTML = `<div class="empty" style="grid-column:1/-1">${esc(K.explain(e))}</div>`; }
+})();
+</script>
+</body>
+</html>

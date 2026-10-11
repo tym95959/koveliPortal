@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Admin | Koveli staff portal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E2A33">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=3">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js?v=3"></script>
+</head>
+<body>
+<main class="page">
+  <div class="page-head">
+    <div><h1>Admin</h1><p>Staff, messages, and who receives emails.</p></div>
+    <div class="seg" id="tabs"><button type="button" data-t="staff" class="on">Staff</button><button type="button" data-t="message">Message staff</button><button type="button" data-t="email">Emails and alerts</button><button type="button" data-t="check">Set-up check</button></div>
+  </div>
+
+  <!-- Staff -->
+  <section class="panel" data-pane="staff">
+    <div class="panel-head"><div><h2>Staff</h2><p id="staffCount"></p></div>
+      <div class="btn-row"><input type="search" id="staffFind" placeholder="Find a name" style="width:190px"><button class="btn primary" id="addStaff" type="button">Add a staff member</button></div>
+    </div>
+    <div class="rows" id="staffList"><div class="empty">Loading…</div></div>
+  </section>
+
+  <!-- Message -->
+  <div class="cols" data-pane="message" hidden>
+    <section class="panel">
+      <div class="panel-head"><h2>Send a message</h2><p>It opens on each person's screen and stays in their inbox.</p></div>
+      <div class="panel-body form">
+        <label class="field"><span>Send to</span><select id="aud"><option value="all">Everyone</option><option value="staff">Staff only</option><option value="supervisor">Supervisors only</option><option value="admin">Admins only</option><option value="chosen">People I choose</option></select></label>
+        <div id="chosenBox" hidden><input type="search" id="pickFind" placeholder="Find a name"><div class="rows" id="pickList" style="border:1px solid var(--line);border-radius:6px;max-height:220px;overflow:auto;margin-top:8px"></div></div>
+        <label class="field"><span>Title</span><input type="text" id="mTitle" maxlength="100"></label>
+        <label class="field"><span>Message</span><textarea id="mBody" rows="6" maxlength="2000"></textarea></label>
+        <button class="btn primary" id="mSend" type="button">Send message</button>
+      </div>
+    </section>
+    <section class="panel"><div class="panel-head"><h2>Sent messages</h2></div><div class="rows" id="mHistory"></div></section>
+  </div>
+
+  <!-- Email -->
+  <div class="cols even" data-pane="email" hidden>
+    <section class="panel">
+      <div class="panel-head"><h2>Who gets the emails</h2><p>One address per line. The staff involved are added automatically.</p></div>
+      <div class="panel-body form">
+        <label class="field"><span>Sick leave and FRL</span><textarea id="eLeave" rows="3"></textarea></label>
+        <label class="field"><span>Sick leave documents (attachments)</span><textarea id="eAttach" rows="2"></textarea><small>Only these people receive the attached medical document.</small></label>
+        <label class="field"><span>Duty changes</span><textarea id="eDuty" rows="3"></textarea></label>
+        <label class="field"><span>Annual leave</span><textarea id="eAnnual" rows="3"></textarea></label>
+        <button class="btn primary" id="eSave" type="button">Save email lists</button>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Try it</h2></div>
+      <div class="panel-body form">
+        <label class="field"><span>Send a test email to</span><input type="email" id="tEmail"></label>
+        <button class="btn" id="tSend" type="button">Send test email</button>
+        <hr style="border:0;border-top:1px solid var(--line);width:100%">
+        <p class="hint">First turn on alerts on this device (Menu, then "Turn on alerts on this device"). Then send yourself a test.</p>
+        <button class="btn" id="tPush" type="button">Send a test alert to my devices</button>
+        <div class="note" id="tResult" hidden></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Check -->
+  <section class="panel" data-pane="check" hidden>
+    <div class="panel-head"><h2>Set-up check</h2><button class="btn sm" id="cRun" type="button">Check again</button></div>
+    <div class="rows" id="cList"></div>
+  </section>
+</main>
+
+<script>
+(async function () {
+  "use strict";
+  const { esc, id, $ } = K;
+  const me = await K.start({ need: "admin" });
+  if (!me) return;
+  let staff = [];
+
+  // ---- tabs ----
+  function show(tab) {
+    document.querySelectorAll("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== tab);
+    document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === tab));
+    if (tab === "message") history();
+    if (tab === "email") loadEmails();
+    if (tab === "check") check();
+  }
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.dataset.t));
+
+  // ---- staff ----
+  async function loadStaff() {
+    staff = await K.staff(true);
+    const q = id("staffFind").value.trim().toLowerCase();
+    const list = staff.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.rcno).toLowerCase().includes(q));
+    id("staffCount").textContent = `${staff.filter(s => s.active !== false).length} active, ${staff.filter(s => s.active === false).length} switched off`;
+    id("staffList").innerHTML = list.map(s => `<div class="row"><div class="row-main"><b>${esc(s.name)}</b><span>Staff number ${esc(s.rcno)}${s.email ? ", " + esc(s.email) : ""}. Sick ${Number(s.sickAllowance ?? 30)}, FRL ${Number(s.frlAllowance ?? 5)}</span></div>
+      <div class="row-side"><span class="tag ${K.roleOf(s.role) === "admin" ? "approved" : K.roleOf(s.role) === "supervisor" ? "info" : ""}">${K.roleLabel(s.role)}</span>${s.active === false ? `<span class="tag rejected">Switched off</span>` : ""}<button class="btn sm" data-edit="${esc(s.id)}" type="button">Edit</button></div></div>`).join("") || `<div class="empty">No staff match.</div>`;
+    id("staffList").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => edit(staff.find(s => s.id === b.dataset.edit)));
+  }
+  id("staffFind").oninput = loadStaff;
+  id("addStaff").onclick = () => edit(null);
+
+  function edit(person) {
+    const isNew = !person, self = person && person.id === me.id, p = person || {};
+    const s = K.sheet({
+      title: isNew ? "Add a staff member" : `Edit ${p.name}`, wide: true,
+      html: `<div class="form">
+        <div class="form-2"><label class="field"><span>Full name</span><input type="text" id="fName" value="${esc(p.name || "")}"></label>
+          <label class="field"><span>Staff number</span><input type="text" id="fId" value="${esc(p.rcno || "")}" ${isNew ? "" : "readonly"}><small>${isNew ? "Used to sign in. It cannot be changed later." : "This cannot be changed."}</small></label></div>
+        <div class="form-2"><label class="field"><span>Role</span><select id="fRole" ${self ? "disabled" : ""}><option>Staff</option><option>Supervisor</option><option>Admin</option></select><small>${self ? "You cannot change your own role." : "Supervisors see team lists and build the roster. Admins approve and manage."}</small></label>
+          <label class="field"><span>Email (optional)</span><input type="email" id="fEmail" value="${esc(p.email || "")}"></label></div>
+        <div class="form-3"><label class="field"><span>Sick leave days a year</span><input type="number" id="fSick" min="0" value="${Number(p.sickAllowance ?? 30)}"></label>
+          <label class="field"><span>FRL days a year</span><input type="number" id="fFrl" min="0" value="${Number(p.frlAllowance ?? 5)}"></label>
+          <label class="field"><span>FRL renews on</span><input type="date" id="fRenew" value="${esc(p.frlRenewal || "")}"><small>Leave empty for 1 January.</small></label></div>
+        <label class="field"><span>${isNew ? "PIN to sign in" : "Set a new PIN (leave empty to keep the current one)"}</span><input type="password" id="fPin" inputmode="numeric" maxlength="8" placeholder="4 to 8 digits" autocomplete="new-password"><small>They can change it themselves afterwards, and add a pattern.</small></label>
+        ${isNew || self ? "" : `<label class="check"><input type="checkbox" id="fActive" ${p.active === false ? "" : "checked"}> Can sign in</label>`}
+      </div>`,
+      foot: `<button class="btn" data-no type="button">Cancel</button><button class="btn primary" data-save type="button">${isNew ? "Add staff member" : "Save changes"}</button>`
+    });
+    $("#fRole", s.el).value = K.roleLabel(p.role || "staff");
+    $("[data-no]", s.el).onclick = () => s.close();
+    const save = $("[data-save]", s.el);
+    save.onclick = () => K.busy(save, async () => {
+      const name = $("#fName", s.el).value.trim(), pin = $("#fPin", s.el).value.trim();
+      const staffId = isNew ? $("#fId", s.el).value.trim().replace(/[\/\s]+/g, "") : p.id;
+      if (!name || !staffId) return K.toast("Enter the name and staff number.", "bad");
+      if (isNew && staff.some(x => x.id.toLowerCase() === staffId.toLowerCase())) return K.toast("That staff number is already used.", "bad");
+      if ((isNew || pin) && !/^\d{4,8}$/.test(pin)) return K.toast("The PIN must be 4 to 8 digits.", "bad");
+      const data = {
+        name, rcno: staffId, role: self ? p.role : $("#fRole", s.el).value, email: $("#fEmail", s.el).value.trim(),
+        sickAllowance: Math.max(0, Number($("#fSick", s.el).value) || 0), frlAllowance: Math.max(0, Number($("#fFrl", s.el).value) || 0),
+        frlRenewal: $("#fRenew", s.el).value || "", active: isNew || self ? true : $("#fActive", s.el).checked, updatedAt: K.stamp()
+      };
+      if (isNew) data.createdAt = K.stamp();
+      await K.db.collection("staff").doc(staffId).set(data, { merge: true });
+      if (pin) await K.api("/api/set-code", { staffId, newPin: pin, adminReset: true });
+      s.close(); K.toast(isNew ? `${name} added. Give them their staff number and PIN.` : "Saved.", "ok"); await loadStaff();
+    });
+  }
+
+  // ---- messages ----
+  id("aud").onchange = () => { id("chosenBox").hidden = id("aud").value !== "chosen"; picks(); };
+  function picks() {
+    const q = id("pickFind").value.trim().toLowerCase(), kept = new Set([...document.querySelectorAll(".pick:checked")].map(x => x.value));
+    id("pickList").innerHTML = staff.filter(s => s.active !== false && (!q || s.name.toLowerCase().includes(q) || kept.has(s.id))).map(s => `<label class="row check" style="padding:8px 12px"><span><input type="checkbox" class="pick" value="${esc(s.id)}" ${kept.has(s.id) ? "checked" : ""}> ${esc(s.name)}</span><span class="hint">${K.roleLabel(s.role)}</span></label>`).join("");
+  }
+  id("pickFind").oninput = picks;
+  id("mSend").onclick = () => K.busy(id("mSend"), async () => {
+    const title = id("mTitle").value.trim(), detail = id("mBody").value.trim(), aud = id("aud").value;
+    if (!title || !detail) return K.toast("Type a title and a message.", "bad");
+    const chosen = [...document.querySelectorAll(".pick:checked")].map(x => x.value);
+    if (aud === "chosen" && !chosen.length) return K.toast("Choose at least one person.", "bad");
+    const to = aud === "all" ? { recipientRoles: ["staff", "supervisor", "admin"] } : aud === "chosen" ? { recipientIds: chosen } : { recipientRoles: [aud] };
+    const label = aud === "all" ? "Everyone" : aud === "chosen" ? `${chosen.length} chosen` : K.roleLabel(aud) + "s";
+    const res = await K.api("/api/notify", { ...to, title, detail, type: "admin-message", popup: true, url: "index.html", sourceId: label });
+    id("mTitle").value = id("mBody").value = "";
+    K.toast(`Message sent. Phone alerts reached ${res.push?.sent || 0} device${res.push?.sent === 1 ? "" : "s"}.`, "ok"); history();
+  });
+  async function history() {
+    try {
+      const snap = await K.db.collection("portalNotifications").where("type", "==", "admin-message").get();
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => K.millis(b.createdAt) - K.millis(a.createdAt)).slice(0, 30);
+      id("mHistory").innerHTML = list.map(m => `<div class="row"><div class="row-main"><b>${esc(m.title)}</b><span style="white-space:pre-wrap">${esc(m.detail)}</span><span>To ${esc(m.sourceId || "staff")}, ${esc(K.when(m.createdAt))}, by ${esc(m.actorName || "Admin")}</span></div><div class="row-side"><button class="btn sm danger" data-del="${esc(m.id)}" type="button">Remove</button></div></div>`).join("") || `<div class="empty">No messages sent yet.</div>`;
+      id("mHistory").querySelectorAll("[data-del]").forEach(b => b.onclick = () => K.busy(b, async () => { await K.db.collection("portalNotifications").doc(b.dataset.del).delete(); history(); }));
+    } catch (e) { id("mHistory").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
+  }
+
+  // ---- emails ----
+  const lines = v => [...new Set(String(v || "").split(/[\n,;]+/).map(x => x.trim().toLowerCase()).filter(Boolean))];
+  async function loadEmails() {
+    const e = (await K.settings(true)).emails || {};
+    id("eLeave").value = (e.leave || []).join("\n"); id("eAttach").value = (e.leaveAttachment || []).join("\n");
+    id("eDuty").value = (e.duty || []).join("\n"); id("eAnnual").value = (e.annual || []).join("\n");
+    if (!id("tEmail").value) id("tEmail").value = me.email || "";
+  }
+  id("eSave").onclick = () => K.busy(id("eSave"), async () => {
+    const emails = { leave: lines(id("eLeave").value), leaveAttachment: lines(id("eAttach").value), duty: lines(id("eDuty").value), annual: lines(id("eAnnual").value) };
+    const bad = Object.values(emails).flat().find(x => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
+    if (bad) return K.toast(`"${bad}" is not an email address.`, "bad");
+    await K.db.collection("settings").doc("portal").set({ emails }, { merge: true });
+    await K.settings(true); K.toast("Email lists saved.", "ok");
+  });
+  const result = (text, ok) => { const box = id("tResult"); box.hidden = false; box.className = "note " + (ok ? "ok" : "bad"); box.textContent = text; };
+  id("tSend").onclick = () => K.busy(id("tSend"), async () => {
+    const to = id("tEmail").value.trim();
+    if (!to) return K.toast("Type an email address.", "bad");
+    const res = await K.api("/api/notify", { email: { kind: "general", to: [to], subject: "Koveli staff portal test email", message: `This is a test sent by ${me.name} from the Koveli staff portal.\nIf you can read this, email is working.` } });
+    const e = res.email || {};
+    result(e.error ? `Email failed: ${e.error}` : e.skipped ? `Email was not sent: ${e.reason}` : `Email sent to ${to}. Check the inbox and the spam folder.`, !e.error && !e.skipped);
+  });
+  id("tPush").onclick = () => K.busy(id("tPush"), async () => {
+    const res = await K.api("/api/notify", { recipientIds: [me.id], title: "Koveli test alert", detail: "Alerts are working on this device.", type: "test", selfTest: true });
+    const p = res.push || {};
+    result(p.error ? `Alert failed: ${p.error}` : p.devices ? `Alert sent to ${p.sent} of your ${p.devices} device${p.devices === 1 ? "" : "s"}.` : "No device is registered for you yet. Open Menu and turn on alerts on this device first.", !!p.sent);
+  });
+
+  // ---- set-up check ----
+  async function check() {
+    id("cList").innerHTML = `<div class="empty">Checking…</div>`;
+    try {
+      const h = await (await fetch("/api/health")).json();
+      const line = (ok, title, text) => `<div class="row"><div class="row-main"><b>${esc(title)}</b><span>${esc(text)}</span></div><div class="row-side"><span class="tag ${ok ? "approved" : "rejected"}">${ok ? "OK" : "Needs fixing"}</span></div></div>`;
+      const sameProject = h.firebaseProject && typeof firebaseConfig !== "undefined" && h.firebaseProject === firebaseConfig.projectId;
+      id("cList").innerHTML =
+        line(h.serviceAccountSet, "Firebase key in Vercel", h.serviceAccountSet ? "FIREBASE_SERVICE_ACCOUNT_JSON is set." : "FIREBASE_SERVICE_ACCOUNT_JSON is missing.") +
+        line(h.databaseReachable, "Database", h.databaseReachable ? `Connected. ${h.staffCount} staff records.` : `Not reachable. ${h.problem || ""}`) +
+        line(sameProject, "Same Firebase project on both sides", sameProject ? `Both use ${h.firebaseProject}.` : `Vercel key is for "${h.firebaseProject || "?"}" but js/firebase-config.js is for "${typeof firebaseConfig !== "undefined" ? firebaseConfig.projectId : "?"}". They must match.`) +
+        line(h.emailSet, "Gmail", h.emailSet ? "EMAIL_USER and EMAIL_PASS are set. Send a test email to confirm the password works." : "EMAIL_USER or EMAIL_PASS is missing, so no emails are sent.") +
+        line(typeof KOVELI_VAPID_KEY === "string" && !KOVELI_VAPID_KEY.startsWith("PASTE"), "Browser alerts key", typeof KOVELI_VAPID_KEY === "string" && !KOVELI_VAPID_KEY.startsWith("PASTE") ? "The Web Push key is in js/firebase-config.js." : "No Web Push key in js/firebase-config.js. Alerts in the browser are off; the phone app is not affected.");
+    } catch (e) { id("cList").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
+  }
+  id("cRun").onclick = check;
+
+  try { await loadStaff(); } catch (e) { id("staffList").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
+})();
+</script>
+</body>
+</html>

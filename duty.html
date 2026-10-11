@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Duty change | Koveli staff portal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E2A33">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=3">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js?v=3"></script>
+</head>
+<body>
+<main class="page">
+  <div class="page-head">
+    <div><h1>Duty change</h1><p>Swap a duty with a colleague. They agree first, then Admin approves.</p></div>
+  </div>
+
+  <div class="cols">
+    <section class="panel">
+      <div class="panel-head"><h2>Ask for a swap</h2></div>
+      <div class="panel-body form">
+        <div class="note bad" id="limitNote" hidden></div>
+        <div class="form-2">
+          <label class="field"><span>Date of the swap</span><input type="date" id="date"></label>
+          <label class="field"><span>Swap with</span><input type="search" id="find" placeholder="Type a name" autocomplete="off"><select id="other" size="1"></select></label>
+        </div>
+        <div class="form-2">
+          <label class="field"><span>Your duty that day</span><select id="myDuty"></select><small id="myHint"></small></label>
+          <label class="field"><span>Their duty that day</span><select id="theirDuty"></select><small id="theirHint"></small></label>
+        </div>
+        <label class="field"><span>Reason (optional)</span><textarea id="reason" rows="2"></textarea></label>
+        <div class="note" id="summary">Choose the date, your colleague and both duties.</div>
+        <button class="btn primary" id="send" type="button">Send the request</button>
+      </div>
+    </section>
+
+    <div class="stack">
+      <section class="panel"><div class="panel-head"><h2>Requests for you</h2></div><div class="rows" id="forMe"><div class="empty">Loading…</div></div></section>
+      <section class="panel"><div class="panel-head"><h2>My requests</h2></div><div class="rows" id="mine"></div></section>
+    </div>
+  </div>
+
+  <section class="panel" id="teamPanel" hidden style="margin-top:16px">
+    <div class="panel-head"><div><h2>All duty changes</h2><p id="teamNote"></p></div>
+      <div class="btn-row" style="align-items:center">
+        <label class="check" id="limitWrap" hidden><input type="checkbox" id="limit"> Limit staff to 2 swaps per half month</label>
+        <div class="seg"><button type="button" data-f="pending" class="on">Waiting</button><button type="button" data-f="all">All</button></div>
+      </div>
+    </div>
+    <div class="rows" id="team"></div>
+  </section>
+</main>
+
+<script>
+(async function () {
+  "use strict";
+  const { esc, id } = K;
+  const me = await K.start();
+  if (!me) return;
+
+  const CODES = [...K.DUTY_ORDER, "OFF"];
+  const LABEL = { "0730": "0730 morning", "0800": "0800 morning", "0830": "0830 morning", "1530": "1530 afternoon", "1630": "1630 afternoon", "1730": "1730 afternoon", "0030": "0030 night", "OFF": "Day off" };
+  let all = [], staff = [], settings = { dutyLimit: true }, filter = "pending", month = null;
+  const st = K.statusOf, live = r => ["pending", "approved"].includes(st(r));
+  const half = d => `${d.slice(0, 7)}-${Number(d.slice(8, 10)) <= 15 ? "a" : "b"}`;
+  const halfLabel = d => `${K.parse(d).toLocaleString("en-GB", { month: "long" })} ${Number(d.slice(8, 10)) <= 15 ? "1 to 15" : "16 to the end"}`;
+  const offSwap = r => r.requesterDuty === "OFF" || r.acceptStaffDuty === "OFF";
+
+  const options = `<option value="">Choose</option>` + CODES.map(c => `<option value="${c}">${LABEL[c]}</option>`).join("");
+  id("myDuty").innerHTML = options; id("theirDuty").innerHTML = options;
+  id("date").min = K.today(); id("date").value = K.today();
+
+  function people() {
+    const q = id("find").value.trim().toLowerCase(), keep = id("other").value;
+    const list = staff.filter(s => s.id !== me.id && s.active !== false && (!q || s.name.toLowerCase().includes(q) || String(s.rcno).toLowerCase().includes(q)));
+    id("other").innerHTML = `<option value="">${list.length ? "Choose a colleague" : "No one matches"}</option>` + list.map(s => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.rcno)})</option>`).join("");
+    if (list.some(s => s.id === keep)) id("other").value = keep; else if (q && list.length === 1) id("other").value = list[0].id;
+  }
+
+  // Fill both duties from the published roster for that date.
+  async function fromRoster() {
+    const date = id("date").value, otherId = id("other").value;
+    id("myHint").textContent = id("theirHint").textContent = "";
+    if (!date) return;
+    try { month = await K.rosterMonth(date.slice(0, 7)); } catch (_) { month = null; }
+    const day = Number(date.slice(8, 10));
+    const set = (personId, select, hint) => {
+      const code = month?.roster?.[personId]?.[day] || "";
+      if (CODES.includes(code)) { id(select).value = code; id(hint).textContent = "Taken from the roster."; }
+      else if (code) id(hint).textContent = `The roster shows ${code === "A-Leave" ? "annual leave" : code}.`;
+    };
+    set(me.id, "myDuty", "myHint");
+    if (otherId) set(otherId, "theirDuty", "theirHint");
+  }
+
+  // Returns the first problem with the request, or "" when it can be sent.
+  function problem() {
+    const date = id("date").value, otherId = id("other").value, mine = id("myDuty").value, theirs = id("theirDuty").value;
+    if (!date || !otherId || !mine || !theirs) return "Choose the date, your colleague and both duties.";
+    if (date < K.today()) return "That date has already passed.";
+    if (mine === theirs) return "Both of you have the same duty, so there is nothing to swap.";
+    const other = staff.find(s => s.id === otherId);
+    const a = month?.staff?.[me.id]?.rosterRole, b = month?.staff?.[otherId]?.rosterRole;
+    if (a && b ? a !== b : K.roleOf(other?.role) !== me.role) return `You can only swap with someone in the same role as you${a && b ? ` (${a})` : ""}.`;
+    if (date === K.today()) {
+      const now = new Intl.DateTimeFormat("en-GB", { timeZone: "Indian/Maldives", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(":", "");
+      const started = [mine, theirs].find(c => c !== "OFF" && c <= now);
+      if (started) return `The ${started} duty has already started today.`;
+    }
+    const myLive = all.filter(r => String(r.requesterId) === me.id && live(r));
+    if (myLive.some(r => r.swapDate === date)) return "You already have a duty change on that date.";
+    if (settings.dutyLimit !== false && mine !== "OFF" && theirs !== "OFF" && myLive.filter(r => half(r.swapDate) === half(date) && !offSwap(r)).length >= 2) return `You have already used 2 duty changes for ${halfLabel(date)}.`;
+    return "";
+  }
+
+  function summary() {
+    const p = problem(), box = id("summary"), other = staff.find(s => s.id === id("other").value);
+    const incomplete = p.startsWith("Choose the date");
+    box.className = "note" + (p && !incomplete ? " bad" : p ? "" : " ok");
+    box.textContent = p || `On ${K.fmt(id("date").value)} you work ${LABEL[id("theirDuty").value]} and ${other.name} works ${LABEL[id("myDuty").value]}.`;
+    id("send").disabled = !!p;
+  }
+
+  async function submit() {
+    const p = problem(); if (p) return K.toast(p, "bad");
+    const other = staff.find(s => s.id === id("other").value), date = id("date").value;
+    const r = {
+      requesterId: me.id, requesterName: me.name, requesterRcNo: me.rcno, requesterDuty: id("myDuty").value,
+      acceptStaffId: other.id, acceptStaffName: other.name, acceptStaffRcNo: other.rcno, acceptStaffDuty: id("theirDuty").value,
+      swapDate: date, reason: id("reason").value.trim(), status: "pending", staffAccepted: false, createdAt: K.stamp()
+    };
+    const ref = await K.db.collection("dutyChanges").add(r);
+    await K.notify({ recipientIds: [other.id], title: "Duty change request", detail: `${me.name} asks to swap on ${K.fmt(date)}: their ${r.requesterDuty} for your ${r.acceptStaffDuty}.`, url: "duty.html", type: "duty", sourceId: ref.id });
+    id("other").value = ""; id("find").value = ""; id("theirDuty").value = ""; id("reason").value = ""; people();
+    K.toast(`Request sent to ${other.name}.`, "ok"); await load();
+  }
+
+  const describe = r => `${K.fmt(r.swapDate)}: ${r.requesterName} ${r.requesterDuty} for ${r.acceptStaffName} ${r.acceptStaffDuty}`;
+  const stage = r => st(r) !== "pending" ? "" : r.staffAccepted ? "Waiting for Admin" : `Waiting for ${r.acceptStaffName}`;
+  const mail = (subject, r, line) => ({ kind: "duty", subject: `Duty change ${subject} - ${r.requesterName} and ${r.acceptStaffName} - ${r.swapDate}`, staffIds: [r.requesterId, r.acceptStaffId],
+    message: [`DUTY CHANGE ${subject.toUpperCase()}`, "----------------------------------------", `Date: ${K.fmt(r.swapDate)}`, `${r.requesterName} (${r.requesterRcNo || r.requesterId}): ${r.requesterDuty} changes to ${r.acceptStaffDuty}`, `${r.acceptStaffName} (${r.acceptStaffRcNo || r.acceptStaffId}): ${r.acceptStaffDuty} changes to ${r.requesterDuty}`, r.reason ? `Reason: ${r.reason}` : "", line || "", "----------------------------------------", "Koveli staff portal"].filter(Boolean).join("\n") });
+
+  function lists() {
+    const today = K.today();
+    const forMe = all.filter(r => String(r.acceptStaffId) === me.id && st(r) === "pending").sort((a, b) => String(a.swapDate).localeCompare(String(b.swapDate)));
+    id("forMe").innerHTML = forMe.map(r => `<div class="row"><div class="row-main"><b>${esc(r.requesterName)} asks to swap</b><span>${esc(K.fmt(r.swapDate))}: you take ${esc(r.requesterDuty)}, they take your ${esc(r.acceptStaffDuty)}${r.reason ? ". " + esc(r.reason) : ""}</span></div>
+      <div class="row-side">${r.staffAccepted ? `<span class="tag info">You agreed</span>` : `<button class="btn sm good" data-yes="${esc(r.id)}" type="button">Agree</button><button class="btn sm danger" data-no="${esc(r.id)}" type="button">Decline</button>`}</div></div>`).join("") || `<div class="empty">No one is waiting for your answer.</div>`;
+    id("forMe").querySelectorAll("[data-yes]").forEach(b => b.onclick = () => K.busy(b, () => answer(b.dataset.yes, true)));
+    id("forMe").querySelectorAll("[data-no]").forEach(b => b.onclick = () => K.busy(b, () => answer(b.dataset.no, false)));
+
+    const mine = all.filter(r => String(r.requesterId) === me.id).sort((a, b) => String(b.swapDate).localeCompare(String(a.swapDate)));
+    id("mine").innerHTML = mine.map(r => `<div class="row"><div class="row-main"><b>Swap with ${esc(r.acceptStaffName)}, ${esc(K.fmt(r.swapDate))}</b><span>Your ${esc(r.requesterDuty)} for their ${esc(r.acceptStaffDuty)}${stage(r) ? ". " + esc(stage(r)) : ""}${r.reviewReason ? ". Admin said: " + esc(r.reviewReason) : ""}</span></div>
+      <div class="row-side">${K.tag(st(r))}${st(r) === "pending" ? `<button class="btn sm danger" data-cancel="${esc(r.id)}" type="button">Cancel</button>` : ""}</div></div>`).join("") || `<div class="empty">You have not asked for a duty change.</div>`;
+    id("mine").querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => K.busy(b, () => cancel(b.dataset.cancel)));
+
+    const used = all.filter(r => String(r.requesterId) === me.id && live(r) && half(r.swapDate) === half(id("date").value || today) && !offSwap(r)).length;
+    id("limitNote").hidden = !(settings.dutyLimit !== false && used >= 2);
+    id("limitNote").textContent = `You have used both duty changes for ${halfLabel(id("date").value || today)}. Swaps that involve a day off are still allowed.`;
+
+    if (!K.isManager) return;
+    id("teamPanel").hidden = false;
+    id("teamNote").textContent = K.isAdmin ? "Approve a swap after both staff have agreed." : "You can see this list. Only an Admin approves.";
+    id("limitWrap").hidden = !K.isAdmin; id("limit").checked = settings.dutyLimit !== false;
+    const rows = all.filter(r => filter === "all" || st(r) === "pending").sort((a, b) => filter === "pending" ? String(a.swapDate).localeCompare(String(b.swapDate)) : String(b.swapDate).localeCompare(String(a.swapDate)));
+    id("team").innerHTML = rows.map(r => `<div class="row${r.swapDate === today ? " today" : ""}"><div class="row-main"><b>${esc(r.requesterName)} and ${esc(r.acceptStaffName)}</b><span>${esc(describe(r))}${r.reason ? ". " + esc(r.reason) : ""}${stage(r) ? ". " + esc(stage(r)) : ""}${r.reviewedBy ? ". Answered by " + esc(r.reviewedBy) : ""}</span></div>
+      <div class="row-side">${K.tag(st(r))}${K.isAdmin && st(r) === "pending" ? `${r.staffAccepted ? `<button class="btn sm good" data-ok="${esc(r.id)}" type="button">Approve</button>` : ""}<button class="btn sm danger" data-rej="${esc(r.id)}" type="button">Reject</button>` : ""}${K.isAdmin ? `<button class="btn sm" data-del="${esc(r.id)}" type="button">Delete</button>` : ""}</div></div>`).join("")
+      || `<div class="empty">${filter === "pending" ? "No duty changes are waiting." : "No duty changes yet."}</div>`;
+    id("team").querySelectorAll("[data-ok]").forEach(b => b.onclick = () => K.busy(b, () => review(b.dataset.ok, "approved")));
+    id("team").querySelectorAll("[data-rej]").forEach(b => b.onclick = () => K.busy(b, () => review(b.dataset.rej, "rejected")));
+    id("team").querySelectorAll("[data-del]").forEach(b => b.onclick = () => K.busy(b, async () => {
+      const r = all.find(x => x.id === b.dataset.del);
+      if (!(await K.confirm(`Delete this duty change for good?\n${describe(r)}`, { ok: "Delete", danger: true }))) return;
+      await K.db.collection("dutyChanges").doc(r.id).delete(); K.toast("Deleted.", "ok"); await load();
+    }));
+  }
+
+  async function fresh(requestId) {
+    const snap = await K.db.collection("dutyChanges").doc(requestId).get();
+    if (!snap.exists || st(snap.data()) !== "pending") { K.toast("This request was changed a moment ago. The list has been refreshed.", "bad"); await load(); return null; }
+    return { id: requestId, ...snap.data() };
+  }
+
+  async function answer(requestId, yes) {
+    const r = await fresh(requestId); if (!r) return;
+    if (yes) {
+      if (!(await K.confirm(`Agree to swap on ${K.fmt(r.swapDate)}? You will work ${r.requesterDuty} and ${r.requesterName} will work ${r.acceptStaffDuty}. Admin still has to approve.`, { ok: "Agree" }))) return;
+      await K.db.collection("dutyChanges").doc(requestId).update({ staffAccepted: true, staffAcceptedAt: K.stamp() });
+      await K.notify({ recipientIds: [r.requesterId], recipientRoles: ["admin"], title: "Duty change agreed", detail: `${me.name} agreed. ${describe(r)}. Waiting for Admin.`, url: "duty.html", type: "duty", sourceId: requestId, email: mail("agreed, waiting for Admin", r) });
+      K.toast("You agreed. Admin has been asked to approve.", "ok");
+    } else {
+      if (!(await K.confirm(`Decline ${r.requesterName}'s request for ${K.fmt(r.swapDate)}?`, { ok: "Decline", danger: true }))) return;
+      await K.db.collection("dutyChanges").doc(requestId).update({ status: "rejected", reviewedBy: me.name, reviewReason: "Declined by " + me.name, reviewedAt: K.stamp() });
+      await K.notify({ recipientIds: [r.requesterId], title: "Duty change declined", detail: `${me.name} declined your request for ${K.fmt(r.swapDate)}.`, url: "duty.html", type: "duty", sourceId: requestId });
+      K.toast("Request declined.", "ok");
+    }
+    await load();
+  }
+
+  async function cancel(requestId) {
+    const r = await fresh(requestId); if (!r) return;
+    if (!(await K.confirm(`Cancel your duty change with ${r.acceptStaffName} on ${K.fmt(r.swapDate)}?`, { ok: "Cancel the request", danger: true }))) return;
+    await K.db.collection("dutyChanges").doc(requestId).update({ status: "cancelled", cancelledAt: K.stamp() });
+    await K.notify({ recipientIds: [r.acceptStaffId], recipientRoles: r.staffAccepted ? ["admin"] : [], title: "Duty change cancelled", detail: `${me.name} cancelled the swap on ${K.fmt(r.swapDate)}.`, url: "duty.html", type: "duty", sourceId: requestId, email: r.staffAccepted ? mail("cancelled", r) : undefined });
+    K.toast("Request cancelled.", "ok"); await load();
+  }
+
+  async function review(requestId, status) {
+    const r = await fresh(requestId); if (!r) return;
+    let reviewReason = "";
+    if (status === "rejected") { reviewReason = await K.ask("Why is this duty change rejected? Both staff will see this.", { ok: "Reject", title: "Reject duty change" }); if (reviewReason === null) return; }
+    await K.db.collection("dutyChanges").doc(requestId).update({ status, reviewReason, reviewedBy: me.name, reviewedById: me.id, reviewedAt: K.stamp() });
+    await K.notify({ recipientIds: [r.requesterId, r.acceptStaffId], recipientRoles: status === "approved" ? ["supervisor"] : [], title: `Duty change ${status}`, detail: `${describe(r)}. ${status === "approved" ? "Approved" : "Rejected"} by ${me.name}.${reviewReason ? " Reason: " + reviewReason : ""}`, url: "duty.html", type: "duty", sourceId: requestId, email: mail(status, r, reviewReason ? `Reason: ${reviewReason}` : "") });
+    K.toast(`Duty change ${status}.`, "ok"); await load();
+  }
+
+  async function load() {
+    [all, staff, settings] = await Promise.all([K.load.duty(), K.staff(), K.settings()]);
+    all = all.filter(r => r.swapDate);
+    people(); lists(); summary();
+  }
+
+  id("find").oninput = () => { people(); fromRoster().then(summary); };
+  id("other").onchange = () => fromRoster().then(summary);
+  id("date").onchange = () => fromRoster().then(() => { lists(); summary(); });
+  id("myDuty").onchange = id("theirDuty").onchange = summary;
+  id("send").onclick = () => K.busy(id("send"), submit);
+  document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { filter = b.dataset.f; document.querySelectorAll("[data-f]").forEach(x => x.classList.toggle("on", x === b)); lists(); });
+  id("limit").onchange = () => K.busy(null, async () => {
+    await K.db.collection("settings").doc("portal").set({ dutyLimit: id("limit").checked }, { merge: true });
+    settings = await K.settings(true); K.toast(settings.dutyLimit ? "Limit is on." : "Limit is off.", "ok"); lists(); summary();
+  });
+
+  try { await load(); await fromRoster(); summary(); } catch (e) { id("forMe").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
+})();
+</script>
+</body>
+</html>

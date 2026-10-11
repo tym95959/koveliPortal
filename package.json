@@ -1,0 +1,11 @@
+{
+  "name": "koveli-staff-portal",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Koveli Lounge staff portal: sign-in, leave, annual leave, duty change and roster.",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "nodemailer": "^6.9.13"
+  }
+}

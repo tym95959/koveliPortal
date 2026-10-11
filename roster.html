@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Roster | Koveli staff portal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E2A33">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=3">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js?v=3"></script>
+<style>
+  .roster-scroll { max-height: calc(100vh - 250px); min-height: 260px; cursor: grab; overscroll-behavior: contain; }
+  .roster-scroll.drag { cursor: grabbing; user-select: none; }
+  .changed { box-shadow: inset 0 0 0 2px var(--ink); }
+  .by-time td { vertical-align: top; text-align: left; white-space: normal; min-width: 118px; }
+  .by-time .who-line { display: block; font-size: 0.86rem; line-height: 1.35; }
+  .by-time .who-line.me { font-weight: 700; color: var(--teal-dark); }
+  .by-time .role-name { display: block; font: 600 0.74rem var(--display); color: var(--muted); margin-top: 3px; }
+  @media print { .roster-scroll { max-height: none !important; overflow: visible !important; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <div class="page-head">
+    <div><h1 id="title">Roster</h1><p id="sub">Approved annual leave and duty changes are shown as soon as Admin approves them.</p></div>
+    <div class="btn-row no-print">
+      <button class="btn" id="refresh" type="button">Check for a newer roster</button>
+      <button class="btn" id="print" type="button">Print</button>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head no-print">
+      <div class="btn-row" style="align-items:end">
+        <label class="field"><span>From</span><input type="date" id="from" style="width:150px"></label>
+        <label class="field"><span>To</span><input type="date" id="to" style="width:150px"></label>
+        <button class="btn sm" id="prevM" type="button">‹ Month</button>
+        <button class="btn sm" id="thisM" type="button">This month</button>
+        <button class="btn sm" id="nextM" type="button">Month ›</button>
+        <button class="btn sm" id="week" type="button">Next 7 days</button>
+        <button class="btn sm" id="goToday" type="button">Today</button>
+      </div>
+      <div class="btn-row" style="align-items:center">
+        <label class="check"><input type="checkbox" id="onlyMe"> Only me</label>
+        <div class="seg"><button type="button" id="vStaff" class="on">By staff</button><button type="button" id="vTime">By duty time</button></div>
+      </div>
+    </div>
+    <div class="scroll roster-scroll" id="wrap"><table class="grid" id="table"><tbody><tr><td class="loading">Loading the roster…</td></tr></tbody></table></div>
+    <div class="panel-body hint" id="note" style="border-top:1px solid var(--line)"></div>
+  </section>
+</main>
+
+<script>
+(async function () {
+  "use strict";
+  const { esc, id } = K;
+  const me = await K.start();
+  if (!me) return;
+
+  const MAX_DAYS = 93;
+  let view = "staff", months = {}, overlay = null, dates = [], seq = 0;
+  const ym = d => d.slice(0, 7);
+
+  function setRange(a, b, force) { id("from").value = a; id("to").value = b; return load(force); }
+  const monthRange = offset => { const base = K.parse(id("from").value || K.today()); const a = new Date(base.getFullYear(), base.getMonth() + offset, 1), b = new Date(a.getFullYear(), a.getMonth() + 1, 0); return [K.iso(a), K.iso(b)]; };
+
+  async function load(force) {
+    let a = id("from").value, b = id("to").value;
+    if (!a || !b) return;
+    if (b < a) { [a, b] = [b, a]; id("from").value = a; id("to").value = b; }
+    dates = []; for (let d = a; d <= b && dates.length < MAX_DAYS; d = K.addDays(d, 1)) dates.push(d);
+    try { localStorage.setItem("koveliRosterRange", JSON.stringify([a, b])); } catch (_) {}
+    const mine = ++seq, wanted = [...new Set(dates.map(ym))];
+    try {
+      const [recs, ov] = await Promise.all([Promise.all(wanted.map(m => K.rosterMonth(m, force === true))), K.rosterOverlay(force === true).catch(() => null)]);
+      if (mine !== seq) return;
+      months = {}; wanted.forEach((m, i) => months[m] = recs[i]); overlay = ov;
+      draw();
+      id("note").textContent = wanted.map((m, i) => `${K.parse(m + "-01").toLocaleString("en-GB", { month: "long", year: "numeric" })}: ${recs[i].from}${recs[i].from !== "just loaded" ? " from " + K.when(recs[i].fetchedAt) : ""}`).join(". ") +
+        (K.addDays(a, MAX_DAYS - 1) < b ? `. Showing the first ${MAX_DAYS} days only.` : ".") + " A dark outline marks a cell changed by approved leave or a duty change.";
+      if (force !== true) toToday(false);
+    } catch (e) {
+      id("table").innerHTML = `<tbody><tr><td class="loading">${esc(K.explain(e))}</td></tr></tbody>`;
+    }
+  }
+
+  function people() {
+    const map = {};
+    Object.keys(months).sort().forEach(m => Object.assign(map, months[m].staff || {}));
+    let list = Object.values(map).sort((a, b) => (a.rosterNo || 9999) - (b.rosterNo || 9999) || a.name.localeCompare(b.name));
+    if (id("onlyMe").checked) list = list.filter(p => p.id === me.id);
+    return list;
+  }
+  function cell(person, date) {
+    const base = months[ym(date)]?.roster?.[person.id]?.[Number(date.slice(8, 10))] || "";
+    return overlay ? { ...overlay(person.id, date, base), base } : { code: base, note: "", base };
+  }
+
+  function draw() {
+    const today = K.today(), list = people();
+    const a = dates[0], b = dates[dates.length - 1];
+    id("title").textContent = `Roster, ${K.fmt(a)} to ${K.fmt(b)}`;
+    let head = `<thead><tr><th class="stick">${view === "staff" ? "Staff" : "Duty"}</th>` + dates.map(d => {
+      const day = K.parse(d), wk = [5, 6].includes(day.getDay());
+      return `<th class="${d === today ? "today" : wk ? "weekend" : ""}" data-d="${d}">${day.getDate()} ${day.toLocaleString("en-GB", { month: "short" })}<small>${day.toLocaleString("en-GB", { weekday: "short" })}</small></th>`;
+    }).join("") + "</tr></thead>";
+
+    if (!list.length) { id("table").className = "grid"; id("table").innerHTML = head + `<tbody><tr><td class="loading" colspan="${dates.length + 1}">${id("onlyMe").checked ? "You are not on the roster for these dates." : "No roster has been published for these dates."}</td></tr></tbody>`; return; }
+
+    let body = "";
+    if (view === "staff") {
+      id("table").className = "grid";
+      K.ROSTER_ROLES.forEach(role => {
+        const group = list.filter(p => p.rosterRole === role);
+        if (!group.length) return;
+        body += `<tr class="group"><td colspan="${dates.length + 1}"><span>${esc(role)} (${group.length})</span></td></tr>`;
+        group.forEach(p => {
+          body += `<tr class="${p.id === me.id ? "mine" : ""}"><td class="stick" title="${esc(p.name)} ${esc(p.rcNo)}">${esc(p.name)}</td>` + dates.map(d => {
+            const c = cell(p, d);
+            return `<td class="cell" title="${esc(p.name)}, ${esc(K.fmt(d))}${c.code ? ": " + esc(c.code === "A-Leave" ? "annual leave" : c.code) : ""}${c.note ? ". " + esc(c.note) : ""}">${c.code ? `<span class="duty ${K.dutyClass(c.code)}${c.note ? " changed" : ""}">${esc(c.code)}</span>` : ""}</td>`;
+          }).join("") + "</tr>";
+        });
+      });
+    } else {
+      id("table").className = "grid by-time";
+      const grid = {};
+      list.forEach(p => dates.forEach(d => { const c = cell(p, d).code; if (c) ((grid[c] = grid[c] || {})[d] = grid[c][d] || []).push(p); }));
+      const codes = Object.keys(grid);
+      const order = [...K.DUTY_ORDER.filter(c => grid[c]), ...codes.filter(c => !K.DUTY_ORDER.includes(c) && c !== "OFF" && c !== "A-Leave").sort(), ...["OFF", "A-Leave"].filter(c => grid[c])];
+      order.forEach(code => {
+        body += `<tr><td class="stick"><span class="duty ${K.dutyClass(code)}">${esc(code)}</span></td>` + dates.map(d => {
+          const here = grid[code][d] || [];
+          return `<td>` + K.ROSTER_ROLES.map(role => { const g = here.filter(p => p.rosterRole === role); return g.length ? `<span class="role-name">${esc(role)}</span>` + g.map(p => `<span class="who-line${p.id === me.id ? " me" : ""}">${esc(p.name)}</span>`).join("") : ""; }).join("") + `</td>`;
+        }).join("") + "</tr>";
+      });
+    }
+    id("table").innerHTML = head + "<tbody>" + body + "</tbody>";
+  }
+
+  function toToday(smooth) {
+    const th = id("table").querySelector("th.today"), wrap = id("wrap"), first = id("table").querySelector("th.stick");
+    if (th) wrap.scrollTo({ left: Math.max(0, th.offsetLeft - (first ? first.offsetWidth : 0) - 6), behavior: smooth ? "smooth" : "auto" });
+  }
+
+  // Drag the table with the mouse to move around.
+  (function () {
+    const wrap = id("wrap"); let drag = null;
+    wrap.addEventListener("pointerdown", e => { if (e.pointerType === "mouse" && e.button === 0) drag = { x: e.clientX, y: e.clientY, l: wrap.scrollLeft, t: wrap.scrollTop, on: false }; });
+    window.addEventListener("pointermove", e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (!drag.on && Math.abs(dx) + Math.abs(dy) < 5) return; drag.on = true; wrap.classList.add("drag"); wrap.scrollLeft = drag.l - dx; wrap.scrollTop = drag.t - dy; });
+    window.addEventListener("pointerup", () => { drag = null; wrap.classList.remove("drag"); });
+  })();
+
+  id("from").onchange = id("to").onchange = () => load();
+  id("prevM").onclick = () => setRange(...monthRange(-1));
+  id("nextM").onclick = () => setRange(...monthRange(1));
+  id("thisM").onclick = () => { id("from").value = K.today(); setRange(...monthRange(0)); };
+  id("week").onclick = () => setRange(K.today(), K.addDays(K.today(), 6));
+  id("goToday").onclick = async () => { const t = K.today(); if (!(t >= id("from").value && t <= id("to").value)) { id("from").value = t; await setRange(...monthRange(0)); } toToday(true); };
+  id("refresh").onclick = () => K.busy(id("refresh"), async () => { await load(true); K.toast("Roster is up to date.", "ok"); });
+  id("print").onclick = () => window.print();
+  id("onlyMe").onchange = draw;
+  id("vStaff").onclick = () => { view = "staff"; id("vStaff").classList.add("on"); id("vTime").classList.remove("on"); draw(); toToday(false); };
+  id("vTime").onclick = () => { view = "time"; id("vTime").classList.add("on"); id("vStaff").classList.remove("on"); draw(); toToday(false); };
+
+  // Start on the half month that contains today, like the published roster.
+  const t = K.today(), day = Number(t.slice(8, 10)), last = new Date(Number(t.slice(0, 4)), Number(t.slice(5, 7)), 0).getDate();
+  await setRange(day <= 15 ? `${ym(t)}-01` : `${ym(t)}-16`, day <= 15 ? `${ym(t)}-15` : `${ym(t)}-${last}`);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Koveli staff portal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E2A33">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=3">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js?v=3"></script>
+</head>
+<body>
+
+<!-- ================= Sign in ================= -->
+<div class="signin" id="signin" hidden>
+  <div class="signin-side">
+    <div>
+      <img class="signin-logo" src="icons/logo.png" alt="">
+      <h1>Koveli Lounge<br>staff portal</h1>
+      <p>Your roster, leave and duty changes in one place.</p>
+    </div>
+    <div class="signin-times" aria-hidden="true"><span>0730</span><span>0830</span><span>1530</span><span>1630</span><span>0030</span></div>
+  </div>
+  <div class="signin-main">
+    <div class="signin-box">
+
+      <div id="stepWho">
+        <h2 style="margin-bottom:10px">Sign in</h2>
+        <label class="field"><span>Your name or staff number</span>
+          <input type="search" id="who" autocomplete="off" placeholder="Start typing your name">
+        </label>
+        <div class="people" id="people" hidden style="margin-top:8px"></div>
+        <p class="msg calm" id="whoMsg" style="margin-top:8px">Loading staff list…</p>
+      </div>
+
+      <div id="stepCode" hidden>
+        <div class="chosen"><b id="chosenName"></b><button type="button" id="changeWho">Not you?</button></div>
+        <div style="margin:14px 0 10px;text-align:center">
+          <div class="seg" role="tablist"><button type="button" id="usePin" class="on">PIN</button><button type="button" id="usePattern">Pattern</button></div>
+        </div>
+        <div id="pinPane">
+          <div class="pin-dots" id="pinDots" aria-live="polite">&nbsp;</div>
+          <div class="keys" id="keys" style="margin-top:12px"></div>
+        </div>
+        <div id="patternPane" hidden>
+          <div class="pattern" id="pattern"><canvas id="patternCanvas"></canvas><div class="pattern-dots" id="patternDots"></div></div>
+          <p class="hint" style="text-align:center;margin-top:6px">Draw your pattern, then lift your finger.</p>
+        </div>
+        <p class="msg" id="codeMsg" role="alert"></p>
+        <label class="check"><input type="checkbox" id="remember" checked> Keep me signed in on this device</label>
+      </div>
+
+      <div id="stepSetup" hidden>
+        <h2 style="margin-bottom:6px">First-time set-up</h2>
+        <p class="hint" style="margin-bottom:12px">There are no staff yet. Create the first Admin, then add everyone else from the Admin page.</p>
+        <div class="form">
+          <label class="field"><span>Set-up key</span><input type="password" id="suKey" placeholder="The SETUP_KEY you saved in Vercel"></label>
+          <label class="field"><span>Your full name</span><input type="text" id="suName"></label>
+          <label class="field"><span>Your staff number</span><input type="text" id="suId" placeholder="For example RC1234"></label>
+          <label class="field"><span>Choose a PIN</span><input type="password" id="suPin" inputmode="numeric" maxlength="8" placeholder="4 to 8 digits"></label>
+          <button class="btn primary block" id="suGo" type="button">Create the first Admin</button>
+          <p class="msg" id="suMsg" role="alert"></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ================= Dashboard ================= -->
+<main class="page" id="dash" hidden>
+  <div class="page-head">
+    <div><h1 id="hello">Hello</h1><p id="todayText"></p></div>
+    <div class="btn-row">
+      <a class="btn primary" href="leave.html">Report sick leave</a>
+      <a class="btn" href="duty.html">Ask for a duty change</a>
+      <a class="btn" href="annual.html">Plan annual leave</a>
+    </div>
+  </div>
+
+  <div class="stack">
+    <section class="board" id="board" aria-label="Today's duties"><div class="board-head"><h2>On duty today</h2></div><div class="board-foot">Loading the roster…</div></section>
+    <div class="tiles" id="tiles"></div>
+    <div class="cols">
+      <div class="stack">
+        <section class="panel"><div class="panel-head"><h2>Waiting for you</h2></div><div class="rows" id="todo"><div class="empty">Loading…</div></div></section>
+        <section class="panel" id="soonPanel" hidden><div class="panel-head"><h2>Today and the next 7 days</h2><p>Leave and duty changes across the team</p></div><div class="rows" id="soon"></div></section>
+      </div>
+      <section class="panel"><div class="panel-head"><h2>My requests</h2></div><div class="rows" id="mine"><div class="empty">Loading…</div></div></section>
+    </div>
+  </div>
+</main>
+
+<script>
+(async function () {
+  "use strict";
+  const { $, esc, id } = K;
+  let me = null;
+  try { me = await K.start(); } catch (e) { document.body.insertAdjacentHTML("beforeend", `<div class="loading">The portal could not start. ${esc(K.explain(e))}</div>`); return; }
+  const next = new URLSearchParams(location.search).get("next") || "";
+  const safeNext = /^[a-z-]+\.html(\?[\w=&%.-]*)?$/i.test(next) ? next : "";
+  if (me && safeNext) { location.replace(safeNext); return; }
+  if (me) return dashboard();
+  signIn();
+
+  // ---------------- Sign in ----------------
+  async function signIn() {
+    id("signin").hidden = false;
+    let staff = [], chosen = null, method = localStorage.getItem("koveliMethod") === "pattern" ? "pattern" : "pin", pin = "", seq = [], drawing = false, cursor = null, working = false;
+
+    const show = step => ["stepWho", "stepCode", "stepSetup"].forEach(s => id(s).hidden = s !== step);
+
+    try {
+      const dir = await K.directory();
+      staff = dir.staff || [];
+      if (dir.setupNeeded) { show("stepSetup"); bindSetup(); return; }
+      id("whoMsg").textContent = "";
+    } catch (e) {
+      id("whoMsg").className = "msg";
+      id("whoMsg").innerHTML = `${esc(K.explain(e))}<br><a href="/api/health" target="_blank" rel="noopener">Check the set-up</a>`;
+      return;
+    }
+
+    const list = () => {
+      const q = id("who").value.trim().toLowerCase(), box = id("people");
+      if (!q) { box.hidden = true; id("whoMsg").textContent = ""; return; }
+      const digits = q.replace(/\D/g, "");
+      const hits = staff.filter(s => s.name.toLowerCase().includes(q) || s.rcno.toLowerCase().includes(q) || (digits.length >= 2 && s.rcno.replace(/\D/g, "").includes(digits))).slice(0, 30);
+      box.hidden = !hits.length;
+      box.innerHTML = hits.map(s => `<button type="button" data-id="${esc(s.id)}"><span>${esc(s.name)}</span><small>${esc(s.rcno)}</small></button>`).join("");
+      id("whoMsg").className = "msg calm";
+      id("whoMsg").textContent = hits.length ? "" : "No one matches that. Check the spelling, or ask an Admin to add you.";
+      box.querySelectorAll("button").forEach(b => b.onclick = () => choose(staff.find(s => s.id === b.dataset.id)));
+    };
+    id("who").oninput = list;
+
+    function choose(person) {
+      chosen = person; pin = ""; seq = [];
+      id("chosenName").textContent = person.name;
+      id("codeMsg").textContent = "";
+      show("stepCode"); setMethod(method);
+    }
+    id("changeWho").onclick = () => { chosen = null; show("stepWho"); id("who").value = ""; list(); id("who").focus(); };
+
+    function setMethod(m) {
+      method = m; try { localStorage.setItem("koveliMethod", m); } catch (_) {}
+      id("usePin").classList.toggle("on", m === "pin"); id("usePattern").classList.toggle("on", m === "pattern");
+      id("pinPane").hidden = m !== "pin"; id("patternPane").hidden = m !== "pattern";
+      id("codeMsg").textContent = "";
+      if (m === "pattern") { seq = []; requestAnimationFrame(draw); } else { pin = ""; dots(); }
+    }
+    id("usePin").onclick = () => setMethod("pin");
+    id("usePattern").onclick = () => setMethod("pattern");
+
+    async function submit(code) {
+      if (working || !chosen) return;
+      working = true;
+      const msg = id("codeMsg"); msg.className = "msg calm"; msg.textContent = "Checking…";
+      try {
+        await K.signIn({ staffId: chosen.id, method, code, remember: id("remember").checked });
+        location.replace(safeNext || "index.html");
+      } catch (e) {
+        msg.className = "msg"; msg.textContent = K.explain(e);
+        pin = ""; seq = []; dots(); draw();
+      } finally { working = false; }
+    }
+
+    // PIN pad
+    const dots = () => { id("pinDots").textContent = pin ? "●".repeat(pin.length) : " "; };
+    const press = k => {
+      if (k === "ok") { if (pin.length < 4) { id("codeMsg").className = "msg"; id("codeMsg").textContent = "Enter your whole PIN, then press OK."; return; } return submit(pin); }
+      if (k === "del") pin = pin.slice(0, -1); else if (pin.length < 8) pin += k;
+      id("codeMsg").textContent = ""; dots();
+    };
+    id("keys").innerHTML = ["1","2","3","4","5","6","7","8","9","del","0","ok"].map(k => `<button type="button" data-k="${k}"${k === "ok" ? ' class="go"' : ""}>${k === "del" ? "⌫" : k === "ok" ? "OK" : k}</button>`).join("");
+    id("keys").querySelectorAll("button").forEach(b => b.onclick = () => press(b.dataset.k));
+    document.addEventListener("keydown", e => {
+      if (id("stepCode").hidden || method !== "pin") return;
+      if (/^\d$/.test(e.key)) press(e.key); else if (e.key === "Backspace") press("del"); else if (e.key === "Enter") press("ok");
+    });
+
+    // Pattern pad
+    const pad = id("pattern"), canvas = id("patternCanvas");
+    id("patternDots").innerHTML = Array.from({ length: 9 }, (_, i) => `<i data-v="${i + 1}"></i>`).join("");
+    const centre = v => { const r = pad.getBoundingClientRect(), cell = r.width / 3, i = v - 1; return { x: (i % 3 + 0.5) * cell, y: (Math.floor(i / 3) + 0.5) * cell }; };
+    const point = e => { const r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const hit = p => { for (let v = 1; v <= 9; v++) { const c = centre(v); if (Math.hypot(c.x - p.x, c.y - p.y) < 32) return v; } return 0; };
+    function draw() {
+      const r = pad.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      if (!r.width) return;
+      canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+      const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
+      id("patternDots").querySelectorAll("i").forEach(d => d.classList.toggle("on", seq.includes(Number(d.dataset.v))));
+      if (!seq.length) return;
+      ctx.beginPath(); seq.forEach((v, i) => { const c = centre(v); i ? ctx.lineTo(c.x, c.y) : ctx.moveTo(c.x, c.y); });
+      if (drawing && cursor) ctx.lineTo(cursor.x, cursor.y);
+      ctx.strokeStyle = "#0b7c86"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
+    }
+    const add = p => { const v = hit(p); if (v && !seq.includes(v)) seq.push(v); };
+    pad.addEventListener("pointerdown", e => { if (working) return; e.preventDefault(); drawing = true; seq = []; id("codeMsg").textContent = ""; pad.setPointerCapture && pad.setPointerCapture(e.pointerId); cursor = point(e); add(cursor); draw(); });
+    pad.addEventListener("pointermove", e => { if (!drawing) return; cursor = point(e); add(cursor); draw(); });
+    const up = () => {
+      if (!drawing) return; drawing = false; cursor = null; draw();
+      if (seq.length < 4) { if (seq.length) { id("codeMsg").className = "msg"; id("codeMsg").textContent = "Join at least 4 dots."; } seq = []; setTimeout(draw, 500); return; }
+      submit(seq.join(""));
+    };
+    pad.addEventListener("pointerup", up); pad.addEventListener("pointercancel", up);
+    window.addEventListener("resize", draw);
+
+    // Remembered name from last time
+    try {
+      const last = JSON.parse(localStorage.getItem("koveliLastUser") || "null");
+      const person = last && staff.find(s => s.id === last.id);
+      if (person) choose(person); else id("who").focus();
+    } catch (_) { id("who").focus(); }
+  }
+
+  function bindSetup() {
+    id("suGo").onclick = () => K.busy(id("suGo"), async () => {
+      const msg = id("suMsg"); msg.textContent = "";
+      try {
+        const staffId = id("suId").value.trim(), pin = id("suPin").value.trim();
+        await K.api("/api/setup", { setupKey: id("suKey").value, name: id("suName").value, staffId, pin }, { open: true });
+        await K.signIn({ staffId: staffId.replace(/[\/\s]+/g, ""), method: "pin", code: pin, remember: true });
+        location.replace("admin.html");
+      } catch (e) { msg.textContent = K.explain(e); }
+    });
+  }
+
+  // ---------------- Dashboard ----------------
+  async function dashboard() {
+    id("dash").hidden = false;
+    const today = K.today();
+    const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Indian/Maldives", hour: "numeric", hour12: false }).format(new Date()));
+    id("hello").textContent = `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${me.name.split(" ")[0]}`;
+    id("todayText").textContent = K.fmt(today, true);
+    if (K.isManager) id("soonPanel").hidden = false;
+
+    drawBoard(today);
+
+    let leave = [], annual = [], duty = [];
+    try { [leave, annual, duty] = await Promise.all([K.load.leave(), K.load.annual(), K.load.duty()]); }
+    catch (e) { id("todo").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; id("mine").innerHTML = ""; return; }
+
+    const st = K.statusOf, mineId = r => String(r.staffId) === me.id;
+    const myLeave = leave.filter(mineId), myAnnual = annual.filter(mineId);
+    const myDuty = duty.filter(r => String(r.requesterId) === me.id);
+    const forMe = duty.filter(r => String(r.acceptStaffId) === me.id && st(r) === "pending" && r.staffAccepted !== true);
+    const use = K.leaveUsage(myLeave, me);
+    const myPending = myLeave.filter(r => st(r) === "pending").length + myAnnual.filter(r => st(r) === "pending").length + myDuty.filter(r => st(r) === "pending").length;
+
+    const pendLeave = leave.filter(r => st(r) === "pending");
+    const pendDuty = duty.filter(r => st(r) === "pending" && r.staffAccepted === true);
+    const pendAnnual = annual.filter(r => st(r) === "pending");
+
+    id("tiles").innerHTML = [
+      [use.sickLeft, `Sick leave days left of ${use.sickAllowance}`, use.sickLeft < 0],
+      [use.frlLeft, `FRL days left of ${use.frlAllowance}`, use.frlLeft < 0],
+      [myPending, "Your requests waiting for an answer", false],
+      K.isAdmin ? [pendLeave.length + pendDuty.length + pendAnnual.length, "Requests waiting for your approval", false] : [forMe.length, "Duty swaps waiting for your answer", false]
+    ].map(([n, label, warn]) => `<div class="tile${warn ? " warn" : ""}"><b>${n}</b><span>${esc(label)}</span></div>`).join("");
+
+    // Waiting for you
+    const todo = [];
+    forMe.forEach(r => todo.push(row(`${r.requesterName} asks to swap duty with you`, `${K.fmt(r.swapDate)}: their ${r.requesterDuty} for your ${r.acceptStaffDuty}`, "duty.html", "Answer")));
+    if (K.isAdmin) {
+      pendLeave.forEach(r => todo.push(row(`${r.staffName}: ${r.leaveType || r.type}`, `${K.fmt(r.date)}${r.reason ? ", " + r.reason : ""}`, "leave.html", "Review")));
+      pendDuty.forEach(r => todo.push(row(`Duty change: ${r.requesterName} and ${r.acceptStaffName}`, `${K.fmt(r.swapDate)}, both have agreed`, "duty.html", "Review")));
+      pendAnnual.forEach(r => todo.push(row(`${r.staffName}: annual leave`, `${K.fmt(r.startDate)} to ${K.fmt(r.endDate)}, ${r.workingDays} working days`, "annual.html", "Review")));
+    }
+    id("todo").innerHTML = todo.join("") || `<div class="empty">Nothing is waiting for you.</div>`;
+
+    // My requests
+    const mine = [
+      ...myLeave.map(r => ({ d: r.date, t: r.leaveType || r.type, s: K.fmt(r.date) + (r.dutyTime ? ", " + r.dutyTime : ""), status: st(r), url: "leave.html" })),
+      ...myAnnual.map(r => ({ d: r.startDate, t: "Annual leave", s: `${K.fmt(r.startDate)} to ${K.fmt(r.endDate)}`, status: st(r), url: "annual.html" })),
+      ...myDuty.map(r => ({ d: r.swapDate, t: `Duty change with ${r.acceptStaffName}`, s: `${K.fmt(r.swapDate)}: ${r.requesterDuty} for ${r.acceptStaffDuty}` + (st(r) === "pending" ? (r.staffAccepted ? ", waiting for Admin" : ", waiting for their answer") : ""), status: st(r), url: "duty.html" }))
+    ].sort((a, b) => String(b.d).localeCompare(String(a.d))).slice(0, 10);
+    id("mine").innerHTML = mine.map(x => `<a class="row" href="${x.url}" style="text-decoration:none;color:inherit"><div class="row-main"><b>${esc(x.t)}</b><span>${esc(x.s)}</span></div><div class="row-side">${K.tag(x.status)}</div></a>`).join("")
+      || `<div class="empty">You have not asked for anything yet.</div>`;
+
+    // Team: today and next 7 days
+    if (K.isManager) {
+      const end = K.addDays(today, 7), live = r => ["pending", "approved"].includes(st(r));
+      const soon = [
+        ...leave.filter(r => live(r) && r.date >= today && r.date <= end).map(r => ({ d: r.date, t: `${r.staffName}: ${r.leaveType || r.type}`, s: K.fmt(r.date) + (r.dutyTime ? ", " + r.dutyTime : ""), status: st(r) })),
+        ...annual.filter(r => st(r) === "approved" && r.endDate >= today && r.startDate <= end).map(r => ({ d: r.startDate < today ? today : r.startDate, t: `${r.staffName}: annual leave`, s: `${K.fmt(r.startDate)} to ${K.fmt(r.endDate)}`, status: "approved" })),
+        ...duty.filter(r => live(r) && r.swapDate >= today && r.swapDate <= end).map(r => ({ d: r.swapDate, t: `${r.requesterName} swaps with ${r.acceptStaffName}`, s: `${K.fmt(r.swapDate)}: ${r.requesterDuty} for ${r.acceptStaffDuty}`, status: st(r) }))
+      ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+      id("soon").innerHTML = soon.map(x => `<div class="row${x.d === today ? " today" : ""}"><div class="row-main"><b>${esc(x.t)}</b><span>${esc(x.s)}</span></div><div class="row-side">${K.tag(x.status)}</div></div>`).join("")
+        || `<div class="empty">No leave or duty changes in the next 7 days.</div>`;
+    }
+  }
+
+  function row(title, sub, url, action) {
+    return `<div class="row"><div class="row-main"><b>${esc(title)}</b><span>${esc(sub)}</span></div><div class="row-side"><a class="btn sm primary" href="${url}">${action}</a></div></div>`;
+  }
+
+  async function drawBoard(today) {
+    const board = id("board");
+    try {
+      const month = await K.rosterMonth(today.slice(0, 7)), day = Number(today.slice(8, 10));
+      // Approved leave and duty changes count on the board too.
+      const overlay = await K.rosterOverlay().catch(() => null);
+      const codeFor = p => { const base = month.roster[p.id]?.[day] || ""; return overlay ? overlay(p.id, today, base).code : base; };
+      const people = Object.values(month.staff).sort((a, b) => (a.rosterNo || 999) - (b.rosterNo || 999) || a.name.localeCompare(b.name));
+      const byDuty = {};
+      people.forEach(p => { const code = codeFor(p); if (code) (byDuty[code] = byDuty[code] || []).push(p); });
+      const codes = Object.keys(byDuty);
+      const order = [...K.DUTY_ORDER.filter(c => byDuty[c]), ...codes.filter(c => !K.DUTY_ORDER.includes(c) && c !== "OFF" && c !== "A-Leave").sort(), ...["OFF", "A-Leave"].filter(c => byDuty[c])];
+      const mine = month.staff[me.id] ? codeFor(month.staff[me.id]) : "";
+      board.innerHTML = `<div class="board-head"><h2>On duty today</h2><span>${mine ? "You: " + esc(mine === "A-Leave" ? "annual leave" : mine) : ""}</span></div>` +
+        (order.length
+          ? order.map(code => `<div class="board-row"><div class="board-time">${esc(code === "A-Leave" ? "LEAVE" : code)}</div><div class="board-names">${byDuty[code].map(p => `<span class="${p.id === me.id ? "me" : (code === "OFF" || code === "A-Leave" ? "muted" : "")}">${esc(p.name)}</span>`).join("")}</div></div>`).join("")
+          : `<div class="board-row"><div class="board-time">—</div><div class="board-names"><span class="muted">No roster has been published for today.</span></div></div>`) +
+        `<div class="board-foot">Roster ${esc(month.from)}. <a href="roster.html">Open the full roster</a></div>`;
+    } catch (e) {
+      board.innerHTML = `<div class="board-head"><h2>On duty today</h2></div><div class="board-foot">The roster could not be loaded. ${esc(K.explain(e))}</div>`;
+    }
+  }
+})();
+</script>
+</body>
+</html>

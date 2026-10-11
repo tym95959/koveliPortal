@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Leave | Koveli staff portal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E2A33">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=3">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js?v=3"></script>
+</head>
+<body>
+<main class="page">
+  <div class="page-head">
+    <div><h1>Sick leave and FRL</h1><p>Report a day off. Admin and Supervisors are told straight away, and you will see the answer in your inbox.</p></div>
+  </div>
+
+  <div class="cols">
+    <div class="stack">
+      <div class="tiles" id="tiles" style="grid-template-columns:repeat(2,minmax(0,1fr))"></div>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Report leave</h2>
+          <div class="seg"><button type="button" id="tabSick" class="on">Sick leave</button><button type="button" id="tabFrl">FRL</button></div>
+        </div>
+        <form class="panel-body form" id="form" novalidate>
+          <div class="form-2">
+            <label class="field"><span>Date</span><input type="date" id="date" required></label>
+            <label class="field"><span>Your duty that day</span><select id="dutyTime"></select><small id="dutyHint"></small></label>
+          </div>
+          <label class="field"><span>Reason</span><select id="reason" required></select></label>
+          <label class="field"><span>More details (optional)</span><textarea id="details" rows="2"></textarea></label>
+          <label class="field" id="fileField"><span>Medical document (optional)</span><input type="file" id="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"><small>PDF, photo or Word file, up to 2.5 MB. It is emailed only to the people Admin has chosen.</small></label>
+          <button class="btn primary" id="send" type="submit">Report sick leave</button>
+        </form>
+      </section>
+    </div>
+
+    <section class="panel"><div class="panel-head"><h2>My leave</h2></div><div class="rows" id="mine"><div class="empty">Loading…</div></div></section>
+  </div>
+
+  <section class="panel" id="teamPanel" hidden style="margin-top:16px">
+    <div class="panel-head"><div><h2>Team leave</h2><p id="teamNote"></p></div>
+      <div class="btn-row">
+        <div class="seg"><button type="button" data-f="pending" class="on">Waiting</button><button type="button" data-f="all">All</button></div>
+        <input type="date" id="from" aria-label="From date" style="width:150px"><input type="date" id="to" aria-label="To date" style="width:150px">
+      </div>
+    </div>
+    <div class="rows" id="team"></div>
+  </section>
+
+  <section class="panel" id="frlPanel" hidden style="margin-top:16px">
+    <div class="panel-head"><div><h2>Frequent FRL</h2><p>Staff with 3 or more FRL days in the last 30 days</p></div></div>
+    <div class="rows" id="frl"></div>
+  </section>
+</main>
+
+<script>
+(async function () {
+  "use strict";
+  const { esc, id } = K;
+  const me = await K.start();
+  if (!me) return;
+
+  const DUTIES = [["0730", "Morning 0730"], ["0800", "Morning 0800"], ["0830", "Morning 0830"], ["1530", "Afternoon 1530"], ["1630", "Afternoon 1630"], ["1730", "Afternoon 1730"], ["0030", "Night 0030"]];
+  const REASONS = {
+    sick: ["Abdominal pain", "Accident injuries", "Allergy", "Anxiety", "Arthritis", "Asthma", "Back pain", "Common cold, flu or fever", "Conjunctivitis", "Dental problem", "Depression", "Eye infection", "Fatigue", "Gastric", "Headache", "Hernia", "Infection", "Joint pain", "Medical appointment", "Menstrual pain", "Migraine", "Minor surgery", "Muscle pain", "Pharyngitis", "Physical injury", "Stomach upset", "Tonsillitis", "Other (explain in details)"],
+    frl: ["Leave according to the leave plan", "Moving to a new house", "Family event", "Taking family to or from an island", "Urgent work at home", "Babysitting", "Parent-teacher meeting", "House renovation", "Family member sick or admitted", "Court appearance", "Funeral", "Other (explain in details)"]
+  };
+  const NAMES = { sick: "Sick leave", frl: "Family responsibility leave" };
+  let type = "sick", all = [], filter = "pending";
+  const st = K.statusOf;
+
+  // ---- form ----
+  id("dutyTime").innerHTML = DUTIES.map(([code, label]) => `<option value="${label}" data-code="${code}">${label}</option>`).join("");
+  id("date").min = K.today(); id("date").value = K.today();
+  function setType(t) {
+    type = t;
+    id("tabSick").classList.toggle("on", t === "sick"); id("tabFrl").classList.toggle("on", t === "frl");
+    id("reason").innerHTML = `<option value="">Choose a reason</option>` + REASONS[t].map(r => `<option>${esc(r)}</option>`).join("");
+    id("fileField").hidden = t !== "sick";
+    id("send").textContent = t === "sick" ? "Report sick leave" : "Report FRL";
+  }
+  id("tabSick").onclick = () => setType("sick"); id("tabFrl").onclick = () => setType("frl");
+  setType("sick");
+
+  // Fill in the duty from the published roster when there is one.
+  async function fillDuty() {
+    const date = id("date").value; id("dutyHint").textContent = "";
+    if (!date) return;
+    const code = await K.dutyOn(me.id, date);
+    const option = [...id("dutyTime").options].find(o => o.dataset.code === code);
+    if (option) { id("dutyTime").value = option.value; id("dutyHint").textContent = "Taken from the roster."; }
+    else if (code === "OFF" || code === "A-Leave") id("dutyHint").textContent = `The roster shows ${code === "OFF" ? "a day off" : "annual leave"} for you on this date.`;
+  }
+  id("date").onchange = fillDuty; fillDuty();
+
+  const fileToBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1] || ""); r.onerror = () => reject(new Error("The file could not be read.")); r.readAsDataURL(file); });
+  const reportedNow = () => new Date().toLocaleString("en-GB", { timeZone: "Indian/Maldives", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " (Maldives time)";
+
+  id("form").onsubmit = e => { e.preventDefault(); K.busy(id("send"), submit); };
+  async function submit() {
+    const date = id("date").value, reason = id("reason").value, details = id("details").value.trim(), dutyTime = id("dutyTime").value;
+    const file = type === "sick" ? id("file").files[0] : null;
+    if (!date) return K.toast("Choose the date.", "bad");
+    if (date < K.today()) return K.toast("That date has already passed.", "bad");
+    if (!reason) return K.toast("Choose a reason.", "bad");
+    if (reason.startsWith("Other") && !details) return K.toast("Explain the reason in the details box.", "bad");
+    if (file && file.size > 2.5 * 1024 * 1024) return K.toast("That file is larger than 2.5 MB.", "bad");
+
+    const mine = all.filter(r => String(r.staffId) === me.id);
+    const clash = mine.find(r => r.date === date && ["pending", "approved"].includes(st(r)));
+    if (clash) return K.toast(`You already have ${clash.leaveType || clash.type} on ${K.fmt(date)} (${st(clash)}).`, "bad");
+    if (type === "frl") {
+      const since = K.addDays(K.today(), -30);
+      const recent = mine.filter(r => r.type === "frl" && ["pending", "approved"].includes(st(r)) && r.date >= since).length;
+      if (recent >= 3 && !(await K.confirm(`You have taken ${recent} FRL days in the last 30 days. Report another one?`, { ok: "Report FRL" }))) return;
+    }
+
+    const request = {
+      staffId: me.id, staffName: me.name, staffRole: K.roleLabel(me.role), staffRcno: me.rcno,
+      type, leaveType: NAMES[type], date, dutyTime, reason, details, days: 1,
+      status: "pending", reportedAt: reportedNow(), attachmentName: file ? file.name : "", createdAt: K.stamp()
+    };
+    const ref = await K.db.collection("leaveRequests").add(request);
+
+    const message = [
+      `${NAMES[type].toUpperCase()} REPORTED`, "----------------------------------------",
+      `Staff: ${me.name} (${me.rcno})`, `Date: ${K.fmt(date)}`, `Duty: ${dutyTime}`, `Reason: ${reason}`,
+      details ? `Details: ${details}` : "", `Reported: ${request.reportedAt}`, file ? `Document: ${file.name}` : "",
+      "----------------------------------------", "Koveli staff portal"
+    ].filter(Boolean).join("\n");
+    const result = await K.notify({
+      recipientRoles: ["admin", "supervisor"], title: `${NAMES[type]} reported`,
+      detail: `${me.name}: ${K.fmt(date)}, ${dutyTime}. ${reason}`, url: "leave.html", type: "leave", sourceId: ref.id,
+      email: {
+        kind: "leave", subject: `${NAMES[type]} - ${me.name} - ${date}`, message, staffIds: [me.id],
+        attachment: file ? { filename: file.name, contentType: file.type || "application/octet-stream", contentBase64: await fileToBase64(file) } : undefined
+      }
+    });
+
+    id("reason").value = ""; id("details").value = ""; id("file").value = "";
+    const emailProblem = result.error || result.email?.error || result.attachment?.error;
+    K.toast(emailProblem ? `Leave reported. The email could not be sent: ${emailProblem}` : "Leave reported. Admin and Supervisors have been told.", emailProblem ? "bad" : "ok");
+    await load();
+  }
+
+  // ---- lists ----
+  async function load() {
+    all = await K.load.leave();
+    const mine = all.filter(r => String(r.staffId) === me.id).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const use = K.leaveUsage(mine, me);
+    id("tiles").innerHTML =
+      `<div class="tile${use.sickLeft < 0 ? " warn" : ""}"><b>${use.sickLeft}</b><span>Sick leave days left of ${use.sickAllowance} this year</span></div>` +
+      `<div class="tile${use.frlLeft < 0 ? " warn" : ""}"><b>${use.frlLeft}</b><span>FRL days left of ${use.frlAllowance}. Renews ${esc(K.fmt(use.frlNext))}</span></div>`;
+    id("mine").innerHTML = mine.map(r => `<div class="row"><div class="row-main"><b>${esc(r.leaveType || r.type)}, ${esc(K.fmt(r.date))}</b><span>${esc(r.dutyTime || "")}${r.reason ? ". " + esc(r.reason) : ""}${st(r) === "rejected" && r.reviewReason ? ". Admin said: " + esc(r.reviewReason) : ""}</span></div>
+      <div class="row-side">${K.tag(st(r))}${st(r) === "pending" ? `<button class="btn sm danger" data-cancel="${esc(r.id)}" type="button">Cancel</button>` : ""}</div></div>`).join("")
+      || `<div class="empty">You have not reported any leave.</div>`;
+    id("mine").querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => K.busy(b, () => cancel(b.dataset.cancel)));
+    if (K.isManager) drawTeam();
+  }
+
+  function drawTeam() {
+    id("teamPanel").hidden = false;
+    id("teamNote").textContent = K.isAdmin ? "Approve or reject what staff have reported." : "You can see this list. Only an Admin approves.";
+    const from = id("from").value, to = id("to").value;
+    const rows = all.filter(r => (filter === "all" || st(r) === "pending") && (!from || r.date >= from) && (!to || r.date <= to))
+      .sort((a, b) => filter === "pending" ? String(a.date).localeCompare(String(b.date)) : String(b.date).localeCompare(String(a.date)));
+    id("team").innerHTML = rows.map(r => `<div class="row${r.date === K.today() ? " today" : ""}"><div class="row-main"><b>${esc(r.staffName)} (${esc(r.staffRcno || r.staffId)}): ${esc(r.leaveType || r.type)}</b>
+      <span>${esc(K.fmt(r.date))}, ${esc(r.dutyTime || "")}. ${esc(r.reason || "")}${r.details ? ". " + esc(r.details) : ""}${r.attachmentName ? ". Document: " + esc(r.attachmentName) : ""}${r.reviewedBy ? ". Answered by " + esc(r.reviewedBy) : ""}</span></div>
+      <div class="row-side">${K.tag(st(r))}${K.isAdmin && st(r) === "pending" ? `<button class="btn sm good" data-ok="${esc(r.id)}" type="button">Approve</button><button class="btn sm danger" data-no="${esc(r.id)}" type="button">Reject</button>` : ""}${K.isAdmin && st(r) !== "approved" ? `<button class="btn sm" data-del="${esc(r.id)}" type="button">Delete</button>` : ""}</div></div>`).join("")
+      || `<div class="empty">${filter === "pending" ? "No leave is waiting for an answer." : "No leave in this period."}</div>`;
+    id("team").querySelectorAll("[data-ok]").forEach(b => b.onclick = () => K.busy(b, () => review(b.dataset.ok, "approved")));
+    id("team").querySelectorAll("[data-no]").forEach(b => b.onclick = () => K.busy(b, () => review(b.dataset.no, "rejected")));
+    id("team").querySelectorAll("[data-del]").forEach(b => b.onclick = () => K.busy(b, () => remove(b.dataset.del)));
+
+    if (K.isAdmin) {
+      const since = K.addDays(K.today(), -30), counts = {};
+      all.filter(r => r.type === "frl" && ["pending", "approved"].includes(st(r)) && r.date >= since).forEach(r => { (counts[r.staffId] = counts[r.staffId] || { name: r.staffName, n: 0 }).n++; });
+      const flagged = Object.values(counts).filter(c => c.n >= 3).sort((a, b) => b.n - a.n);
+      id("frlPanel").hidden = !flagged.length;
+      id("frl").innerHTML = flagged.map(c => `<div class="row"><div class="row-main"><b>${esc(c.name)}</b></div><div class="row-side"><span class="tag pending">${c.n} FRL days</span></div></div>`).join("");
+    }
+  }
+  document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { filter = b.dataset.f; document.querySelectorAll("[data-f]").forEach(x => x.classList.toggle("on", x === b)); drawTeam(); });
+  id("from").onchange = id("to").onchange = drawTeam;
+
+  // Always look at the newest copy before changing a request.
+  async function fresh(requestId) {
+    const snap = await K.db.collection("leaveRequests").doc(requestId).get();
+    if (!snap.exists || st(snap.data()) !== "pending") { K.toast("This request was changed a moment ago. The list has been refreshed.", "bad"); await load(); return null; }
+    return { id: requestId, ...snap.data() };
+  }
+
+  async function cancel(requestId) {
+    const r = await fresh(requestId); if (!r) return;
+    if (!(await K.confirm(`Cancel your ${r.leaveType} on ${K.fmt(r.date)}? The day goes back to your balance.`, { ok: "Cancel the leave", danger: true }))) return;
+    await K.db.collection("leaveRequests").doc(requestId).update({ status: "cancelled", cancelledAt: K.stamp() });
+    await K.notify({
+      recipientRoles: ["admin", "supervisor"], title: "Leave cancelled", detail: `${me.name} cancelled ${r.leaveType} on ${K.fmt(r.date)}.`, url: "leave.html", type: "leave", sourceId: requestId,
+      email: { kind: "leave", subject: `Leave cancelled - ${me.name} - ${r.date}`, message: `${me.name} (${me.rcno}) cancelled ${r.leaveType} on ${K.fmt(r.date)}, ${r.dutyTime}.\n\nKoveli staff portal`, staffIds: [me.id] }
+    });
+    K.toast("Leave cancelled.", "ok"); await load();
+  }
+
+  async function review(requestId, status) {
+    const r = await fresh(requestId); if (!r) return;
+    let reviewReason = "";
+    if (status === "rejected") { reviewReason = await K.ask(`Why is ${r.staffName}'s leave rejected? They will see this.`, { ok: "Reject the leave", title: "Reject leave" }); if (reviewReason === null) return; }
+    await K.db.collection("leaveRequests").doc(requestId).update({ status, reviewReason, reviewedBy: me.name, reviewedById: me.id, reviewedAt: K.stamp() });
+    await K.notify({
+      recipientIds: [r.staffId], title: status === "approved" ? "Leave approved" : "Leave rejected",
+      detail: `${r.leaveType} on ${K.fmt(r.date)} was ${status} by ${me.name}.${reviewReason ? " Reason: " + reviewReason : ""}`, url: "leave.html", type: "leave", sourceId: requestId
+    });
+    K.toast(status === "approved" ? "Leave approved." : "Leave rejected.", "ok"); await load();
+  }
+
+  async function remove(requestId) {
+    const r = all.find(x => x.id === requestId); if (!r) return;
+    if (!(await K.confirm(`Delete this record for good?\n${r.staffName}: ${r.leaveType || r.type}, ${K.fmt(r.date)}`, { ok: "Delete", danger: true }))) return;
+    await K.db.collection("leaveRequests").doc(requestId).delete();
+    K.toast("Record deleted.", "ok"); await load();
+  }
+
+  try { await load(); } catch (e) { id("mine").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
+})();
+</script>
+</body>
+</html>
