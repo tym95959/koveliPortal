@@ -161,12 +161,13 @@ async function sendPush(db, ids, { title, message, data = {} }) {
     if (!ids.size) return { sent: 0, failed: 0, devices: 0 };
     const fb = getAdmin();
     const snap = await db.collection("pushDevices").get();
-    const tokens = new Map();
+    const tokens = new Map(), phones = new Set();
     snap.forEach(doc => {
         const d = doc.data() || {};
         const token = String(d.token || "").trim();
         if (d.enabled === false || !token || !ids.has(String(d.staffId || ""))) return;
         tokens.set(token, doc.id);
+        if (String(d.platform || "web") !== "web") phones.add(token);
     });
     const all = [...tokens.keys()];
     if (!all.length) return { sent: 0, failed: 0, devices: 0 };
@@ -176,19 +177,25 @@ async function sendPush(db, ids, { title, message, data = {} }) {
 
     let sent = 0, failed = 0;
     const dead = [];
-    for (let i = 0; i < all.length; i += 500) {
-        const batch = all.slice(i, i + 500);
-        // Data only: sw.js (web) and the phone app draw the alert, so it is never shown twice.
-        const response = await fb.messaging().sendEachForMulticast({
-            tokens: batch, data: stringData,
-            android: { priority: "high" },
-            webpush: { headers: { Urgency: "high" } }
-        });
-        sent += response.successCount; failed += response.failureCount;
-        response.responses.forEach((r, index) => {
-            const code = String(r.error?.code || "");
-            if (!r.success && (code.includes("registration-token-not-registered") || code.includes("invalid-registration-token"))) dead.push(tokens.get(batch[index]));
-        });
+    // Browsers get data only (sw.js draws the alert). The phone app cannot draw its own alert
+    // while it is closed, so phones get a ready-made alert that Android shows by itself.
+    const groups = [
+        { list: all.filter(t => !phones.has(t)), extra: { webpush: { headers: { Urgency: "high" } } } },
+        { list: all.filter(t => phones.has(t)), extra: {
+            notification: { title: String(title || "Koveli"), body: String(message || "") },
+            android: { priority: "high", notification: { channelId: "koveli_alerts", sound: "default" } }
+        } }
+    ];
+    for (const group of groups) {
+        for (let i = 0; i < group.list.length; i += 500) {
+            const batch = group.list.slice(i, i + 500);
+            const response = await fb.messaging().sendEachForMulticast({ tokens: batch, data: stringData, ...group.extra });
+            sent += response.successCount; failed += response.failureCount;
+            response.responses.forEach((r, index) => {
+                const code = String(r.error?.code || "");
+                if (!r.success && (code.includes("registration-token-not-registered") || code.includes("invalid-registration-token"))) dead.push(tokens.get(batch[index]));
+            });
+        }
     }
     if (dead.length) {
         const writer = db.batch();
