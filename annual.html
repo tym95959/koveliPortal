@@ -280,9 +280,9 @@
   }
 
   async function load() {
-    const [reqs, hols, people, settings] = await Promise.all([K.load.annual(), K.db.collection("holidays").get(), K.staff(), K.settings()]);
+    const [reqs, hols, people, settings] = await Promise.all([K.load.annual(), K.holidays(), K.staff(), K.settings()]);
     requests = reqs.filter(r => r.startDate && r.endDate);
-    holidays = hols.docs.map(d => ({ id: d.id, ...d.data() })).filter(h => h.date);
+    holidays = hols.filter(h => h.date);
     staff = people; capacity = Math.max(1, Number(settings.annualCapacity) || 2);
     draw(); lists(); counts();
   }
