@@ -199,6 +199,11 @@ input[readonly] { background: var(--sunk); color: var(--ink-soft); }
 .board-head h2 { color: #fff; font-size: 1.35rem; }
 .board-head span { color: #9fb7bc; font: 500 0.95rem var(--display); }
 .board-row { display: grid; grid-template-columns: 78px 1fr; gap: 14px; align-items: baseline; padding: 9px 18px; border-top: 1px solid #1d3f49; }
+.board-row.mine { grid-template-columns: 130px 110px 1fr; align-items: center; }
+.board-day { display: flex; flex-direction: column; }
+.board-day b { font: 700 1.05rem var(--display); }
+.board-day span { color: #9fb7bc; font-size: 0.85rem; }
+@media (max-width: 560px) { .board-row.mine { grid-template-columns: 1fr auto; } .board-row.mine .board-names { grid-column: 1 / -1; } .board-row.mine .board-names:empty { display: none; } }
 .board-time { font: 700 1.5rem var(--display); color: var(--amber); letter-spacing: 0.05em; font-variant-numeric: tabular-nums; }
 .board-names { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 500 1rem var(--display); }
 .board-names .me { color: var(--amber); font-weight: 700; }
