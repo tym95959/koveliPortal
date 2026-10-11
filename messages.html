@@ -75,7 +75,7 @@
     const res = await K.api("/api/notify", { type: "message", recipientIds: to, detail });
     id("mBody").value = ""; document.querySelectorAll(".pick").forEach(x => x.checked = false);
     K.toast(`Message sent to ${res.people} ${res.people === 1 ? "person" : "people"}.`, "ok");
-    box = "out"; tabs(); await load();
+    box = "out"; tabs(); await load(true);
   });
 
   function tabs() { document.querySelectorAll("#boxTabs button").forEach(b => b.classList.toggle("on", b.dataset.b === box)); }
@@ -91,11 +91,10 @@
     id("mList").querySelectorAll("[data-reply]").forEach(b => b.onclick = () => reply(b.dataset.reply));
   }
 
-  async function load() {
+  async function load(force) {
     try {
-      const col = K.db.collection("portalNotifications");
-      const [a, b] = await Promise.all([col.where("recipientIds", "array-contains", me.id).get(), col.where("actorId", "==", me.id).get()]);
-      const read = snap => snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => m.type === "message").sort((x, y) => K.millis(y.createdAt) - K.millis(x.createdAt)).slice(0, 60);
+      const [a, b] = await Promise.all([K.load.inboxMine(), K.load.sent(force === true)]);
+      const read = list => list.filter(m => m.type === "message").sort((x, y) => K.millis(y.createdAt) - K.millis(x.createdAt)).slice(0, 60);
       inbox = read(a).filter(m => m.actorId !== me.id); sent = read(b);
       draw();
     } catch (e) { id("mList").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
