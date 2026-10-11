@@ -83,7 +83,7 @@
   </div>
 
   <div class="stack">
-    <section class="board" id="board" aria-label="Today's duties"><div class="board-head"><h2>On duty today</h2></div><div class="board-foot">Loading the roster…</div></section>
+    <section class="board" id="board" aria-label="My duty today and tomorrow"><div class="board-head"><h2>My duty</h2></div><div class="board-foot">Loading the roster…</div></section>
     <div class="tiles" id="tiles"></div>
     <div class="cols">
       <div class="stack">
@@ -262,26 +262,27 @@
     return `<div class="row"><div class="row-main"><b>${esc(title)}</b><span>${esc(sub)}</span></div><div class="row-side"><a class="btn sm primary" href="${url}">${action}</a></div></div>`;
   }
 
+  // My own duty for today and tomorrow (approved leave and duty changes included).
   async function drawBoard(today) {
     const board = id("board");
     try {
-      const month = await K.rosterMonth(today.slice(0, 7)), day = Number(today.slice(8, 10));
-      // Approved leave and duty changes count on the board too.
       const overlay = await K.rosterOverlay().catch(() => null);
-      const codeFor = p => { const base = month.roster[p.id]?.[day] || ""; return overlay ? overlay(p.id, today, base).code : base; };
-      const people = Object.values(month.staff).sort((a, b) => (a.rosterNo || 999) - (b.rosterNo || 999) || a.name.localeCompare(b.name));
-      const byDuty = {};
-      people.forEach(p => { const code = codeFor(p); if (code) (byDuty[code] = byDuty[code] || []).push(p); });
-      const codes = Object.keys(byDuty);
-      const order = [...K.DUTY_ORDER.filter(c => byDuty[c]), ...codes.filter(c => !K.DUTY_ORDER.includes(c) && c !== "OFF" && c !== "A-Leave").sort(), ...["OFF", "A-Leave"].filter(c => byDuty[c])];
-      const mine = month.staff[me.id] ? codeFor(month.staff[me.id]) : "";
-      board.innerHTML = `<div class="board-head"><h2>On duty today</h2><span>${mine ? "You: " + esc(mine === "A-Leave" ? "annual leave" : mine) : ""}</span></div>` +
-        (order.length
-          ? order.map(code => `<div class="board-row"><div class="board-time">${esc(code === "A-Leave" ? "LEAVE" : code)}</div><div class="board-names">${byDuty[code].map(p => `<span class="${p.id === me.id ? "me" : (code === "OFF" || code === "A-Leave" ? "muted" : "")}">${esc(p.name)}</span>`).join("")}</div></div>`).join("")
-          : `<div class="board-row"><div class="board-time">—</div><div class="board-names"><span class="muted">No roster has been published for today.</span></div></div>`) +
-        `<div class="board-foot">Roster ${esc(month.from)}. <a href="roster.html">Open the full roster</a></div>`;
+      let from = "", onRoster = false;
+      const dutyOn = async date => {
+        const month = await K.rosterMonth(date.slice(0, 7));
+        from = from || month.from;
+        if (month.staff[me.id]) onRoster = true;
+        const base = month.roster[me.id]?.[Number(date.slice(8, 10))] || "";
+        return overlay ? overlay(me.id, date, base) : { code: base, note: "" };
+      };
+      const days = [["Today", today], ["Tomorrow", K.addDays(today, 1)]];
+      const duties = await Promise.all(days.map(([, date]) => dutyOn(date).catch(() => ({ code: "", note: "" }))));
+      const label = code => code === "A-Leave" ? "LEAVE" : code;
+      board.innerHTML = `<div class="board-head"><h2>My duty</h2></div>` +
+        days.map(([name, date], i) => `<div class="board-row mine"><div class="board-day"><b>${name}</b><span>${esc(K.fmt(date))}</span></div><div class="board-time">${duties[i].code ? esc(label(duties[i].code)) : "—"}</div><div class="board-names">${duties[i].note ? `<span class="muted">${esc(duties[i].note)}</span>` : duties[i].code ? "" : `<span class="muted">${onRoster ? "Nothing on the roster yet" : "You are not on this roster"}</span>`}</div></div>`).join("") +
+        `<div class="board-foot">Roster ${esc(from)}. <a href="roster.html">Open the full roster</a></div>`;
     } catch (e) {
-      board.innerHTML = `<div class="board-head"><h2>On duty today</h2></div><div class="board-foot">The roster could not be loaded. ${esc(K.explain(e))}</div>`;
+      board.innerHTML = `<div class="board-head"><h2>My duty</h2></div><div class="board-foot">The roster could not be loaded. ${esc(K.explain(e))}</div>`;
     }
   }
 })();
