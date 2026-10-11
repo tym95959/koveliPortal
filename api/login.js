@@ -1,4 +1,4 @@
-// Sign in: checks the PIN or pattern on the server and returns a Firebase sign-in token.
+// Sign in: checks the PIN on the server and returns a Firebase sign-in token.
 const { getAdmin, readBody, fail, roleOf, checkCode, lockState, recordFailure, clearFailures, LOCK_MINUTES } = require("./_lib");
 
 module.exports = async function handler(req, res) {
@@ -7,9 +7,9 @@ module.exports = async function handler(req, res) {
     try {
         const body = readBody(req);
         const staffId = String(body.staffId || "").trim();
-        const method = body.method === "pin" ? "pin" : "pattern";
+        const method = "pin";
         const code = String(body.code || "").trim();
-        if (!staffId || !code) return fail(res, 400, "Choose your name and enter your code.");
+        if (!staffId || !code) return fail(res, 400, "Choose your name and enter your PIN.");
 
         const fb = getAdmin(), db = fb.firestore();
         const lock = await lockState(db, staffId);
@@ -21,11 +21,10 @@ module.exports = async function handler(req, res) {
         if (staff.active === false) return fail(res, 403, "This profile is switched off. Ask an Admin.");
 
         const result = await checkCode(db, staffId, method, code);
-        if (result.noCode) return fail(res, 403, "No login code is set for this profile. Ask an Admin to set one.");
+        if (result.noCode || !result.hasPin) return fail(res, 403, "No PIN is set for this profile. Ask an Admin to set one.");
         if (!result.ok) {
             const f = await recordFailure(lock);
-            const what = method === "pin" ? "PIN" : "pattern";
-            return fail(res, 401, f.locked ? `Too many wrong tries. Try again in ${LOCK_MINUTES} minutes.` : `Wrong ${what}. ${f.left} ${f.left === 1 ? "try" : "tries"} left.`);
+            return fail(res, 401, f.locked ? `Too many wrong tries. Try again in ${LOCK_MINUTES} minutes.` : `Wrong PIN. ${f.left} ${f.left === 1 ? "try" : "tries"} left.`);
         }
         await clearFailures(lock);
 

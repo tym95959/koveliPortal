@@ -37,7 +37,10 @@
 
   // ---------- Roles ----------
   K.roleOf = v => { const r = String(v || "").trim().toLowerCase(); return r === "admin" || r === "administrator" ? "admin" : r === "supervisor" || r === "sup" ? "supervisor" : "staff"; };
-  K.roleLabel = r => ({ admin: "Admin", supervisor: "Supervisor", staff: "Staff" }[K.roleOf(r)]);
+  // Admin and Supervisor have extra access. Every other role (Staff, HK, any role an Admin adds) has staff access
+  // and simply shows its own name.
+  K.roleLabel = r => { const k = K.roleOf(r), raw = String(r || "").trim(); return k === "admin" ? "Admin" : k === "supervisor" ? "Supervisor" : (raw && raw.toLowerCase() !== "staff" ? raw : "Staff"); };
+  K.roles = async force => { const extra = (await K.settings(force)).roles; return ["Staff", ...(Array.isArray(extra) ? extra : ["HK"]).filter(x => x && !["staff", "admin", "supervisor"].includes(String(x).toLowerCase())), "Supervisor", "Admin"]; };
 
   // ---------- Duty codes ----------
   const DUTY_CLASS = { "0730": "d0730", "0800": "d0800", "0830": "d0830", "1530": "d1530", "1630": "d1630", "1730": "d1730", "0030": "d0030", "OFF": "dOFF", "A-Leave": "dALEAVE" };
@@ -180,7 +183,7 @@
     }
 
     K.me = {
-      id: user.uid, name: staff.name || "Staff", role: K.roleOf(staff.role), rcno: staff.rcno || user.uid, email: staff.email || "",
+      id: user.uid, name: staff.name || "Staff", role: K.roleOf(staff.role), roleName: K.roleLabel(staff.role), rcno: staff.rcno || user.uid, email: staff.email || "",
       sickAllowance: Number(staff.sickAllowance ?? 30), frlAllowance: Number(staff.frlAllowance ?? 5), frlRenewal: staff.frlRenewal || ""
     };
     K.isAdmin = K.me.role === "admin";
@@ -211,7 +214,7 @@
       ["index.html", "Home", "home"], ["roster.html", "Roster", "roster"], ["leave.html", "Leave", "leave"],
       ["annual.html", "Annual leave", "annual"], ["duty.html", "Duty change", "duty"]
     ];
-    const extra = [];
+    const extra = [["messages.html", "Messages"]];
     if (K.isManager) extra.push(["roster-editor.html", "Roster editor"]);
     if (K.isAdmin) extra.push(["admin.html", "Admin"]);
     const on = href => page === href ? ' class="on" aria-current="page"' : "";
@@ -222,7 +225,7 @@
       <a class="brand" href="index.html"><span class="brand-mark"><img src="icons/logo-96.png" alt=""></span><span class="brand-name">Koveli</span></a>
       <nav class="nav" aria-label="Main">${links.concat(extra).map(([href, label]) => `<a href="${href}"${on(href)}>${label}</a>`).join("")}</nav>
       <div class="topbar-tools">
-        <div class="who"><b>${esc(K.me.name)}</b><span>${K.roleLabel(K.me.role)}</span></div>
+        <div class="who"><b>${esc(K.me.name)}</b><span>${esc(K.me.roleName)}</span></div>
         <button class="icon-btn" id="kInboxBtn" type="button">Inbox <span class="count" id="kInboxCount"></span></button>
         <button class="icon-btn" id="kMenuBtn" type="button" aria-label="Menu">Menu</button>
       </div></div>`;
@@ -239,10 +242,10 @@
     K.id("kMenuBtn").onclick = () => {
       const s = K.sheet({
         title: K.me.name,
-        html: `<p class="hint" style="margin-bottom:12px">${K.roleLabel(K.me.role)}, staff number ${esc(K.me.rcno)}</p>
+        html: `<p class="hint" style="margin-bottom:12px">${esc(K.me.roleName)}, staff number ${esc(K.me.rcno)}</p>
           <div class="stack" style="gap:8px">
             ${extra.map(([href, label]) => `<a class="btn block" href="${href}">${label}</a>`).join("")}
-            <a class="btn block" href="security.html">Change PIN or pattern</a>
+            <a class="btn block" href="security.html">Change PIN</a>
             <button class="btn block" id="kAlertsBtn" type="button">Turn on alerts on this device</button>
             <button class="btn block danger" id="kOutBtn" type="button">Sign out</button>
           </div>`
@@ -283,7 +286,7 @@
       title: "Inbox", wide: true,
       html: notes.length
         ? `<div style="margin:-16px">${notes.map(n => `<button class="inbox-item${seen.has(n.id) ? "" : " new"}" data-id="${esc(n.id)}" data-url="${esc(n.url || "")}" type="button"><b>${esc(n.title)}</b><span>${esc(n.detail)}</span><small>${esc(n.actorName ? n.actorName + ", " : "")}${esc(K.when(n.time))}</small></button>`).join("")}</div>`
-        : `<div class="empty">Nothing here yet. Approvals, requests and messages from Admin will show up here.</div>`,
+        : `<div class="empty">Nothing here yet. Approvals, requests and messages will show up here.</div>`,
       foot: notes.length ? `<button class="btn" id="kReadAll" type="button">Mark all as read</button>` : ""
     });
     const markAll = () => { notes.forEach(n => seen.add(n.id)); saveSeen(); const c = K.id("kInboxCount"); if (c) c.textContent = ""; };

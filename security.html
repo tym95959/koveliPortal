@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>PIN and pattern | Koveli staff portal</title>
+<title>Change PIN | Koveli staff portal</title>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
@@ -21,20 +21,15 @@
 </head>
 <body>
 <main class="page" style="max-width:760px">
-  <div class="page-head"><div><h1>PIN and pattern</h1><p>Change how you sign in. You need your current PIN to save a change.</p></div></div>
+  <div class="page-head"><div><h1>Change PIN</h1><p>You need your current PIN to save a change.</p></div></div>
   <section class="panel">
     <div class="panel-body form">
-      <label class="field"><span>Current PIN</span><input type="password" id="current" inputmode="numeric" maxlength="9" autocomplete="current-password"><small>If you only have a pattern, type its dot numbers (top left is 1, bottom right is 9).</small></label>
+      <label class="field"><span>Current PIN</span><input type="password" id="current" inputmode="numeric" maxlength="8" autocomplete="current-password"></label>
       <div class="form-2">
         <label class="field"><span>New PIN</span><input type="password" id="pin" inputmode="numeric" maxlength="8" placeholder="4 to 8 digits" autocomplete="new-password"></label>
         <label class="field"><span>New PIN again</span><input type="password" id="pin2" inputmode="numeric" maxlength="8" autocomplete="new-password"></label>
       </div>
-      <div class="field"><span>New pattern (optional)</span>
-        <div class="pattern" id="pattern"><canvas id="canvas"></canvas><div class="pattern-dots" id="dots"></div></div>
-        <p class="hint" id="patternText" style="text-align:center">Draw a pattern that joins at least 4 dots.</p>
-        <div style="text-align:center"><button class="btn sm" id="clearPattern" type="button">Clear pattern</button></div>
-      </div>
-      <button class="btn primary" id="save" type="button">Save changes</button>
+      <button class="btn primary" id="save" type="button">Save new PIN</button>
     </div>
   </section>
 </main>
@@ -45,40 +40,14 @@
   const me = await K.start();
   if (!me) return;
 
-  let seq = [], drawing = false, cursor = null;
-  const pad = id("pattern"), canvas = id("canvas");
-  id("dots").innerHTML = Array.from({ length: 9 }, (_, i) => `<i data-v="${i + 1}"></i>`).join("");
-  const centre = v => { const r = pad.getBoundingClientRect(), cell = r.width / 3, i = v - 1; return { x: (i % 3 + 0.5) * cell, y: (Math.floor(i / 3) + 0.5) * cell }; };
-  const point = e => { const r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-  function draw() {
-    const r = pad.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-    canvas.width = r.width * dpr; canvas.height = r.height * dpr;
-    const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
-    id("dots").querySelectorAll("i").forEach(d => d.classList.toggle("on", seq.includes(Number(d.dataset.v))));
-    id("patternText").textContent = seq.length ? `${seq.length} dots joined${seq.length < 4 ? ". Join at least 4." : "."}` : "Draw a pattern that joins at least 4 dots.";
-    if (!seq.length) return;
-    ctx.beginPath(); seq.forEach((v, i) => { const c = centre(v); i ? ctx.lineTo(c.x, c.y) : ctx.moveTo(c.x, c.y); });
-    if (drawing && cursor) ctx.lineTo(cursor.x, cursor.y);
-    ctx.strokeStyle = "#0b7c86"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
-  }
-  const add = p => { for (let v = 1; v <= 9; v++) { const c = centre(v); if (Math.hypot(c.x - p.x, c.y - p.y) < 32 && !seq.includes(v)) seq.push(v); } };
-  pad.addEventListener("pointerdown", e => { e.preventDefault(); drawing = true; seq = []; pad.setPointerCapture && pad.setPointerCapture(e.pointerId); cursor = point(e); add(cursor); draw(); });
-  pad.addEventListener("pointermove", e => { if (!drawing) return; cursor = point(e); add(cursor); draw(); });
-  const up = () => { drawing = false; cursor = null; draw(); };
-  pad.addEventListener("pointerup", up); pad.addEventListener("pointercancel", up);
-  id("clearPattern").onclick = () => { seq = []; draw(); };
-  window.addEventListener("resize", draw);
-
   id("save").onclick = () => K.busy(id("save"), async () => {
     const currentCode = id("current").value.trim(), newPin = id("pin").value.trim();
     if (!currentCode) return K.toast("Type your current PIN.", "bad");
-    if (!newPin && !seq.length) return K.toast("Type a new PIN or draw a new pattern.", "bad");
-    if (newPin && !/^\d{4,8}$/.test(newPin)) return K.toast("The new PIN must be 4 to 8 digits.", "bad");
-    if (newPin && newPin !== id("pin2").value.trim()) return K.toast("The two new PINs are not the same.", "bad");
-    if (seq.length && seq.length < 4) return K.toast("The pattern must join at least 4 dots.", "bad");
-    const res = await K.api("/api/set-code", { currentCode, newPin, newPattern: seq.join("") });
-    id("current").value = id("pin").value = id("pin2").value = ""; seq = []; draw();
-    K.toast(res.pinChanged && res.patternChanged ? "PIN and pattern changed." : res.pinChanged ? "PIN changed." : "Pattern changed.", "ok");
+    if (!/^\d{4,8}$/.test(newPin)) return K.toast("The new PIN must be 4 to 8 digits.", "bad");
+    if (newPin !== id("pin2").value.trim()) return K.toast("The two new PINs are not the same.", "bad");
+    await K.api("/api/set-code", { currentCode, newPin });
+    id("current").value = id("pin").value = id("pin2").value = "";
+    K.toast("PIN changed.", "ok");
   });
 })();
 </script>

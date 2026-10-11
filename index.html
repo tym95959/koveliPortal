@@ -45,16 +45,10 @@
 
       <div id="stepCode" hidden>
         <div class="chosen"><b id="chosenName"></b><button type="button" id="changeWho">Not you?</button></div>
-        <div style="margin:14px 0 10px;text-align:center">
-          <div class="seg" role="tablist"><button type="button" id="usePin" class="on">PIN</button><button type="button" id="usePattern">Pattern</button></div>
-        </div>
+        <p class="hint" style="margin:14px 0 6px;text-align:center">Enter your PIN</p>
         <div id="pinPane">
           <div class="pin-dots" id="pinDots" aria-live="polite">&nbsp;</div>
           <div class="keys" id="keys" style="margin-top:12px"></div>
-        </div>
-        <div id="patternPane" hidden>
-          <div class="pattern" id="pattern"><canvas id="patternCanvas"></canvas><div class="pattern-dots" id="patternDots"></div></div>
-          <p class="hint" style="text-align:center;margin-top:6px">Draw your pattern, then lift your finger.</p>
         </div>
         <p class="msg" id="codeMsg" role="alert"></p>
         <label class="check"><input type="checkbox" id="remember" checked> Keep me signed in on this device</label>
@@ -116,7 +110,7 @@
   // ---------------- Sign in ----------------
   async function signIn() {
     id("signin").hidden = false;
-    let staff = [], chosen = null, method = localStorage.getItem("koveliMethod") === "pattern" ? "pattern" : "pin", pin = "", seq = [], drawing = false, cursor = null, working = false;
+    let staff = [], chosen = null, pin = "", working = false;
 
     const show = step => ["stepWho", "stepCode", "stepSetup"].forEach(s => id(s).hidden = s !== step);
 
@@ -145,33 +139,23 @@
     id("who").oninput = list;
 
     function choose(person) {
-      chosen = person; pin = ""; seq = [];
+      chosen = person; pin = "";
       id("chosenName").textContent = person.name;
       id("codeMsg").textContent = "";
-      show("stepCode"); setMethod(method);
+      show("stepCode"); dots();
     }
     id("changeWho").onclick = () => { chosen = null; show("stepWho"); id("who").value = ""; list(); id("who").focus(); };
-
-    function setMethod(m) {
-      method = m; try { localStorage.setItem("koveliMethod", m); } catch (_) {}
-      id("usePin").classList.toggle("on", m === "pin"); id("usePattern").classList.toggle("on", m === "pattern");
-      id("pinPane").hidden = m !== "pin"; id("patternPane").hidden = m !== "pattern";
-      id("codeMsg").textContent = "";
-      if (m === "pattern") { seq = []; requestAnimationFrame(draw); } else { pin = ""; dots(); }
-    }
-    id("usePin").onclick = () => setMethod("pin");
-    id("usePattern").onclick = () => setMethod("pattern");
 
     async function submit(code) {
       if (working || !chosen) return;
       working = true;
       const msg = id("codeMsg"); msg.className = "msg calm"; msg.textContent = "Checking…";
       try {
-        await K.signIn({ staffId: chosen.id, method, code, remember: id("remember").checked });
+        await K.signIn({ staffId: chosen.id, method: "pin", code, remember: id("remember").checked });
         location.replace(safeNext || "index.html");
       } catch (e) {
         msg.className = "msg"; msg.textContent = K.explain(e);
-        pin = ""; seq = []; dots(); draw();
+        pin = ""; dots();
       } finally { working = false; }
     }
 
@@ -185,37 +169,9 @@
     id("keys").innerHTML = ["1","2","3","4","5","6","7","8","9","del","0","ok"].map(k => `<button type="button" data-k="${k}"${k === "ok" ? ' class="go"' : ""}>${k === "del" ? "⌫" : k === "ok" ? "OK" : k}</button>`).join("");
     id("keys").querySelectorAll("button").forEach(b => b.onclick = () => press(b.dataset.k));
     document.addEventListener("keydown", e => {
-      if (id("stepCode").hidden || method !== "pin") return;
+      if (id("stepCode").hidden) return;
       if (/^\d$/.test(e.key)) press(e.key); else if (e.key === "Backspace") press("del"); else if (e.key === "Enter") press("ok");
     });
-
-    // Pattern pad
-    const pad = id("pattern"), canvas = id("patternCanvas");
-    id("patternDots").innerHTML = Array.from({ length: 9 }, (_, i) => `<i data-v="${i + 1}"></i>`).join("");
-    const centre = v => { const r = pad.getBoundingClientRect(), cell = r.width / 3, i = v - 1; return { x: (i % 3 + 0.5) * cell, y: (Math.floor(i / 3) + 0.5) * cell }; };
-    const point = e => { const r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-    const hit = p => { for (let v = 1; v <= 9; v++) { const c = centre(v); if (Math.hypot(c.x - p.x, c.y - p.y) < 32) return v; } return 0; };
-    function draw() {
-      const r = pad.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-      if (!r.width) return;
-      canvas.width = r.width * dpr; canvas.height = r.height * dpr;
-      const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
-      id("patternDots").querySelectorAll("i").forEach(d => d.classList.toggle("on", seq.includes(Number(d.dataset.v))));
-      if (!seq.length) return;
-      ctx.beginPath(); seq.forEach((v, i) => { const c = centre(v); i ? ctx.lineTo(c.x, c.y) : ctx.moveTo(c.x, c.y); });
-      if (drawing && cursor) ctx.lineTo(cursor.x, cursor.y);
-      ctx.strokeStyle = "#0b7c86"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
-    }
-    const add = p => { const v = hit(p); if (v && !seq.includes(v)) seq.push(v); };
-    pad.addEventListener("pointerdown", e => { if (working) return; e.preventDefault(); drawing = true; seq = []; id("codeMsg").textContent = ""; pad.setPointerCapture && pad.setPointerCapture(e.pointerId); cursor = point(e); add(cursor); draw(); });
-    pad.addEventListener("pointermove", e => { if (!drawing) return; cursor = point(e); add(cursor); draw(); });
-    const up = () => {
-      if (!drawing) return; drawing = false; cursor = null; draw();
-      if (seq.length < 4) { if (seq.length) { id("codeMsg").className = "msg"; id("codeMsg").textContent = "Join at least 4 dots."; } seq = []; setTimeout(draw, 500); return; }
-      submit(seq.join(""));
-    };
-    pad.addEventListener("pointerup", up); pad.addEventListener("pointercancel", up);
-    window.addEventListener("resize", draw);
 
     // Remembered name from last time
     try {

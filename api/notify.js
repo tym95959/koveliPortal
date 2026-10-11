@@ -26,6 +26,24 @@ module.exports = async function handler(req, res) {
         // Only an Admin may broadcast a message that pops up on everyone's screen.
         if ((popup || type === "admin-message") && user.role !== "admin") return fail(res, 403, "Only an Admin can send a message to staff.");
 
+        // A message from one person to others. Anyone signed in may send one, to people they name.
+        if (type === "message") {
+            const to = [...new Set(recipientIds)].filter(id => id !== user.uid).slice(0, 300);
+            if (!to.length) return fail(res, 400, "Choose at least one person.");
+            if (!detail) return fail(res, 400, "Type a message.");
+            const fb = getAdmin(), db = fb.firestore();
+            const heading = `Message from ${user.name}`;
+            const ref = await db.collection("portalNotifications").add({
+                recipientIds: to, recipientRoles: [], title: heading, detail, url: "messages.html", type: "message", sourceId: "", popup: false,
+                actorId: user.uid, actorName: user.name,
+                createdAt: fb.firestore.FieldValue.serverTimestamp()
+            });
+            let push = null;
+            try { push = await sendPush(db, new Set(to), { title: heading, message: detail, data: { type, notificationId: ref.id, url: "messages.html" } }); }
+            catch (error) { console.error("message push:", error); push = { error: error?.message || "Push failed" }; }
+            return res.status(200).json({ success: true, inbox: ref.id, push, email: null, people: to.length });
+        }
+
         const fb = getAdmin(), db = fb.firestore();
         const out = { success: true, inbox: null, push: null, email: null };
 

@@ -22,14 +22,14 @@
 <body>
 <main class="page">
   <div class="page-head">
-    <div><h1>Admin</h1><p>Staff, messages, and who receives emails.</p></div>
+    <div><h1>Admin</h1><p>Staff, roles, messages, and who receives emails.</p></div>
     <div class="seg" id="tabs"><button type="button" data-t="staff" class="on">Staff</button><button type="button" data-t="message">Message staff</button><button type="button" data-t="email">Emails and alerts</button><button type="button" data-t="check">Set-up check</button></div>
   </div>
 
   <!-- Staff -->
   <section class="panel" data-pane="staff">
     <div class="panel-head"><div><h2>Staff</h2><p id="staffCount"></p></div>
-      <div class="btn-row"><input type="search" id="staffFind" placeholder="Find a name" style="width:190px"><button class="btn primary" id="addStaff" type="button">Add a staff member</button></div>
+      <div class="btn-row"><input type="search" id="staffFind" placeholder="Find a name" style="width:190px"><button class="btn" id="editRoles" type="button">Roles</button><button class="btn primary" id="addStaff" type="button">Add a staff member</button></div>
     </div>
     <div class="rows" id="staffList"><div class="empty">Loading…</div></div>
   </section>
@@ -39,7 +39,7 @@
     <section class="panel">
       <div class="panel-head"><h2>Send a message</h2><p>It opens on each person's screen and stays in their inbox.</p></div>
       <div class="panel-body form">
-        <label class="field"><span>Send to</span><select id="aud"><option value="all">Everyone</option><option value="staff">Staff only</option><option value="supervisor">Supervisors only</option><option value="admin">Admins only</option><option value="chosen">People I choose</option></select></label>
+        <label class="field"><span>Send to</span><select id="aud"><option value="all">Everyone</option><option value="staff">All staff (not Supervisors or Admins)</option><option value="supervisor">Supervisors only</option><option value="admin">Admins only</option><optgroup label="By role" id="audRoles"></optgroup><option value="chosen">People I choose</option></select></label>
         <div id="chosenBox" hidden><input type="search" id="pickFind" placeholder="Find a name"><div class="rows" id="pickList" style="border:1px solid var(--line);border-radius:6px;max-height:220px;overflow:auto;margin-top:8px"></div></div>
         <label class="field"><span>Title</span><input type="text" id="mTitle" maxlength="100"></label>
         <label class="field"><span>Message</span><textarea id="mBody" rows="6" maxlength="2000"></textarea></label>
@@ -87,7 +87,11 @@
   const { esc, id, $ } = K;
   const me = await K.start({ need: "admin" });
   if (!me) return;
-  let staff = [];
+  let staff = [], roles = await K.roles().catch(() => ["Staff", "HK", "Supervisor", "Admin"]);
+  const sameRole = (a, b) => K.roleLabel(a).toLowerCase() === K.roleLabel(b).toLowerCase();
+  const customRoles = () => roles.filter(r => !["Staff", "Supervisor", "Admin"].includes(r));
+  function drawAudRoles() { id("audRoles").innerHTML = customRoles().map(r => `<option value="role:${esc(r)}">${esc(r)} only</option>`).join(""); }
+  drawAudRoles();
 
   // ---- tabs ----
   function show(tab) {
@@ -106,7 +110,7 @@
     const list = staff.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.rcno).toLowerCase().includes(q));
     id("staffCount").textContent = `${staff.filter(s => s.active !== false).length} active, ${staff.filter(s => s.active === false).length} switched off`;
     id("staffList").innerHTML = list.map(s => `<div class="row"><div class="row-main"><b>${esc(s.name)}</b><span>Staff number ${esc(s.rcno)}${s.email ? ", " + esc(s.email) : ""}. Sick ${Number(s.sickAllowance ?? 30)}, FRL ${Number(s.frlAllowance ?? 5)}</span></div>
-      <div class="row-side"><span class="tag ${K.roleOf(s.role) === "admin" ? "approved" : K.roleOf(s.role) === "supervisor" ? "info" : ""}">${K.roleLabel(s.role)}</span>${s.active === false ? `<span class="tag rejected">Switched off</span>` : ""}<button class="btn sm" data-edit="${esc(s.id)}" type="button">Edit</button></div></div>`).join("") || `<div class="empty">No staff match.</div>`;
+      <div class="row-side"><span class="tag ${K.roleOf(s.role) === "admin" ? "approved" : K.roleOf(s.role) === "supervisor" ? "info" : ""}">${esc(K.roleLabel(s.role))}</span>${s.active === false ? `<span class="tag rejected">Switched off</span>` : ""}<button class="btn sm" data-edit="${esc(s.id)}" type="button">Edit</button></div></div>`).join("") || `<div class="empty">No staff match.</div>`;
     id("staffList").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => edit(staff.find(s => s.id === b.dataset.edit)));
   }
   id("staffFind").oninput = loadStaff;
@@ -119,12 +123,12 @@
       html: `<div class="form">
         <div class="form-2"><label class="field"><span>Full name</span><input type="text" id="fName" value="${esc(p.name || "")}"></label>
           <label class="field"><span>Staff number</span><input type="text" id="fId" value="${esc(p.rcno || "")}" ${isNew ? "" : "readonly"}><small>${isNew ? "Used to sign in. It cannot be changed later." : "This cannot be changed."}</small></label></div>
-        <div class="form-2"><label class="field"><span>Role</span><select id="fRole" ${self ? "disabled" : ""}><option>Staff</option><option>Supervisor</option><option>Admin</option></select><small>${self ? "You cannot change your own role." : "Supervisors see team lists and build the roster. Admins approve and manage."}</small></label>
+        <div class="form-2"><label class="field"><span>Role</span><select id="fRole" ${self ? "disabled" : ""}>${[...new Set([...roles, K.roleLabel(p.role || "Staff")])].map(r => `<option>${esc(r)}</option>`).join("")}</select><small>${self ? "You cannot change your own role." : "Supervisors see team lists and build the roster. Admins approve and manage. All other roles have staff access."}</small></label>
           <label class="field"><span>Email (optional)</span><input type="email" id="fEmail" value="${esc(p.email || "")}"></label></div>
         <div class="form-3"><label class="field"><span>Sick leave days a year</span><input type="number" id="fSick" min="0" value="${Number(p.sickAllowance ?? 30)}"></label>
           <label class="field"><span>FRL days a year</span><input type="number" id="fFrl" min="0" value="${Number(p.frlAllowance ?? 5)}"></label>
           <label class="field"><span>FRL renews on</span><input type="date" id="fRenew" value="${esc(p.frlRenewal || "")}"><small>Leave empty for 1 January.</small></label></div>
-        <label class="field"><span>${isNew ? "PIN to sign in" : "Set a new PIN (leave empty to keep the current one)"}</span><input type="password" id="fPin" inputmode="numeric" maxlength="8" placeholder="4 to 8 digits" autocomplete="new-password"><small>They can change it themselves afterwards, and add a pattern.</small></label>
+        <label class="field"><span>${isNew ? "PIN to sign in" : "Set a new PIN (leave empty to keep the current one)"}</span><input type="password" id="fPin" inputmode="numeric" maxlength="8" placeholder="4 to 8 digits" autocomplete="new-password"><small>They can change it themselves afterwards.</small></label>
         ${isNew || self ? "" : `<label class="check"><input type="checkbox" id="fActive" ${p.active === false ? "" : "checked"}> Can sign in</label>`}
       </div>`,
       foot: `<button class="btn" data-no type="button">Cancel</button><button class="btn primary" data-save type="button">${isNew ? "Add staff member" : "Save changes"}</button>`
@@ -150,20 +154,60 @@
     });
   }
 
+  // ---- roles ----
+  id("editRoles").onclick = () => {
+    let list = customRoles();
+    const s = K.sheet({
+      title: "Roles",
+      html: `<p class="hint" style="margin-bottom:12px">Admin, Supervisor and Staff are built in. Roles you add here have the same access as Staff; the name shows on the person's profile and you can message a role as a group.</p>
+        <div class="rows" id="rList" style="border:1px solid var(--line);border-radius:6px;margin-bottom:12px"></div>
+        <div class="btn-row"><input type="text" id="rNew" maxlength="24" placeholder="New role name, for example HK" style="flex:1;min-width:0"><button class="btn" id="rAdd" type="button">Add role</button></div>`,
+      foot: `<button class="btn" data-no type="button">Cancel</button><button class="btn primary" data-save type="button">Save roles</button>`
+    });
+    const draw = () => {
+      $("#rList", s.el).innerHTML = ["Admin", "Supervisor", "Staff"].map(r => `<div class="row"><div class="row-main"><b>${r}</b></div><div class="row-side"><span class="hint">Built in</span></div></div>`).join("") +
+        list.map((r, i) => { const n = staff.filter(x => sameRole(x.role, r)).length; return `<div class="row"><div class="row-main"><b>${esc(r)}</b><span>${n} ${n === 1 ? "person" : "people"}</span></div><div class="row-side"><button class="btn sm danger" data-i="${i}" type="button">Remove</button></div></div>`; }).join("");
+      s.el.querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
+        const r = list[Number(b.dataset.i)];
+        if (staff.some(x => sameRole(x.role, r))) return K.toast(`Move the people who are ${r} to another role first.`, "bad");
+        list.splice(Number(b.dataset.i), 1); draw();
+      });
+    };
+    const add = () => {
+      const name = $("#rNew", s.el).value.trim().replace(/\s+/g, " ");
+      if (!name) return;
+      if (["admin", "administrator", "supervisor", "sup", "staff"].includes(name.toLowerCase()) || list.some(r => r.toLowerCase() === name.toLowerCase())) return K.toast("That role already exists.", "bad");
+      list.push(name); $("#rNew", s.el).value = ""; draw();
+    };
+    $("#rAdd", s.el).onclick = add;
+    $("#rNew", s.el).onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); add(); } };
+    $("[data-no]", s.el).onclick = () => s.close();
+    const save = $("[data-save]", s.el);
+    save.onclick = () => K.busy(save, async () => {
+      add();
+      await K.db.collection("settings").doc("portal").set({ roles: list }, { merge: true });
+      roles = await K.roles(true); drawAudRoles();
+      s.close(); K.toast("Roles saved.", "ok");
+    });
+    draw();
+  };
+
   // ---- messages ----
   id("aud").onchange = () => { id("chosenBox").hidden = id("aud").value !== "chosen"; picks(); };
   function picks() {
     const q = id("pickFind").value.trim().toLowerCase(), kept = new Set([...document.querySelectorAll(".pick:checked")].map(x => x.value));
-    id("pickList").innerHTML = staff.filter(s => s.active !== false && (!q || s.name.toLowerCase().includes(q) || kept.has(s.id))).map(s => `<label class="row check" style="padding:8px 12px"><span><input type="checkbox" class="pick" value="${esc(s.id)}" ${kept.has(s.id) ? "checked" : ""}> ${esc(s.name)}</span><span class="hint">${K.roleLabel(s.role)}</span></label>`).join("");
+    id("pickList").innerHTML = staff.filter(s => s.active !== false && (!q || s.name.toLowerCase().includes(q) || kept.has(s.id))).map(s => `<label class="row check" style="padding:8px 12px"><span><input type="checkbox" class="pick" value="${esc(s.id)}" ${kept.has(s.id) ? "checked" : ""}> ${esc(s.name)}</span><span class="hint">${esc(K.roleLabel(s.role))}</span></label>`).join("");
   }
   id("pickFind").oninput = picks;
   id("mSend").onclick = () => K.busy(id("mSend"), async () => {
     const title = id("mTitle").value.trim(), detail = id("mBody").value.trim(), aud = id("aud").value;
     if (!title || !detail) return K.toast("Type a title and a message.", "bad");
-    const chosen = [...document.querySelectorAll(".pick:checked")].map(x => x.value);
+    const byRole = aud.startsWith("role:") ? aud.slice(5) : "";
+    const chosen = byRole ? staff.filter(x => x.active !== false && sameRole(x.role, byRole)).map(x => x.id) : [...document.querySelectorAll(".pick:checked")].map(x => x.value);
+    if (byRole && !chosen.length) return K.toast(`Nobody has the role ${byRole} yet.`, "bad");
     if (aud === "chosen" && !chosen.length) return K.toast("Choose at least one person.", "bad");
-    const to = aud === "all" ? { recipientRoles: ["staff", "supervisor", "admin"] } : aud === "chosen" ? { recipientIds: chosen } : { recipientRoles: [aud] };
-    const label = aud === "all" ? "Everyone" : aud === "chosen" ? `${chosen.length} chosen` : K.roleLabel(aud) + "s";
+    const to = aud === "all" ? { recipientRoles: ["staff", "supervisor", "admin"] } : aud === "chosen" || byRole ? { recipientIds: chosen } : { recipientRoles: [aud] };
+    const label = aud === "all" ? "Everyone" : byRole ? byRole : aud === "chosen" ? `${chosen.length} chosen` : K.roleLabel(aud) + "s";
     const res = await K.api("/api/notify", { ...to, title, detail, type: "admin-message", popup: true, url: "index.html", sourceId: label });
     id("mTitle").value = id("mBody").value = "";
     K.toast(`Message sent. Phone alerts reached ${res.push?.sent || 0} device${res.push?.sent === 1 ? "" : "s"}.`, "ok"); history();

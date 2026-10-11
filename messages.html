@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Messages | Koveli staff portal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E2A33">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=3">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js?v=3"></script>
+</head>
+<body>
+<main class="page">
+  <div class="page-head"><div><h1>Messages</h1><p>Send a message to one person, a group or everyone. It lands in their inbox and alerts their phone.</p></div></div>
+  <div class="cols">
+    <section class="panel">
+      <div class="panel-head"><h2>New message</h2></div>
+      <div class="panel-body form">
+        <label class="field"><span>Send to</span><select id="aud"></select></label>
+        <div id="chosenBox"><input type="search" id="pickFind" placeholder="Find a name"><div class="rows" id="pickList" style="border:1px solid var(--line);border-radius:6px;max-height:240px;overflow:auto;margin-top:8px"></div></div>
+        <label class="field"><span>Message</span><textarea id="mBody" rows="5" maxlength="2000"></textarea></label>
+        <button class="btn primary" id="mSend" type="button">Send message</button>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Messages</h2><div class="seg" id="boxTabs"><button type="button" data-b="in" class="on">To me</button><button type="button" data-b="out">Sent by me</button></div></div>
+      <div class="rows" id="mList"><div class="empty">Loading…</div></div>
+    </section>
+  </div>
+</main>
+<script>
+(async function () {
+  "use strict";
+  const { esc, id } = K;
+  const me = await K.start();
+  if (!me) return;
+  let staff = [], box = "in", inbox = [], sent = [];
+  try { staff = (await K.staff()).filter(s => s.active !== false && s.id !== me.id); } catch (e) { K.toast(K.explain(e), "bad"); }
+  const nameOf = sid => (staff.find(s => s.id === sid) || {}).name || (sid === me.id ? "me" : "someone");
+  const groups = [...new Set(staff.map(s => K.roleLabel(s.role)))].sort();
+
+  id("aud").innerHTML = `<option value="chosen">People I choose</option><option value="all">Everyone</option>` + groups.map(g => `<option value="role:${esc(g)}">Everyone who is ${esc(g)}</option>`).join("");
+  function picks() {
+    const q = id("pickFind").value.trim().toLowerCase(), kept = new Set([...document.querySelectorAll(".pick:checked")].map(x => x.value));
+    id("pickList").innerHTML = staff.filter(s => !q || s.name.toLowerCase().includes(q) || kept.has(s.id)).map(s => `<label class="row check" style="padding:8px 12px"><span><input type="checkbox" class="pick" value="${esc(s.id)}" ${kept.has(s.id) ? "checked" : ""}> ${esc(s.name)}</span><span class="hint">${esc(K.roleLabel(s.role))}</span></label>`).join("") || `<div class="empty">No one matches.</div>`;
+  }
+  id("pickFind").oninput = picks;
+  id("aud").onchange = () => { id("chosenBox").hidden = id("aud").value !== "chosen"; };
+  picks();
+
+  function reply(sid) {
+    id("aud").value = "chosen"; id("chosenBox").hidden = false; id("pickFind").value = "";
+    picks();
+    document.querySelectorAll(".pick").forEach(x => x.checked = x.value === sid);
+    id("mBody").focus(); id("mBody").scrollIntoView({ block: "center" });
+  }
+
+  id("mSend").onclick = () => K.busy(id("mSend"), async () => {
+    const aud = id("aud").value, detail = id("mBody").value.trim();
+    const to = aud === "all" ? staff.map(s => s.id)
+      : aud.startsWith("role:") ? staff.filter(s => K.roleLabel(s.role) === aud.slice(5)).map(s => s.id)
+      : [...document.querySelectorAll(".pick:checked")].map(x => x.value);
+    if (!to.length) return K.toast("Choose at least one person.", "bad");
+    if (!detail) return K.toast("Type a message.", "bad");
+    const res = await K.api("/api/notify", { type: "message", recipientIds: to, detail });
+    id("mBody").value = ""; document.querySelectorAll(".pick").forEach(x => x.checked = false);
+    K.toast(`Message sent to ${res.people} ${res.people === 1 ? "person" : "people"}.`, "ok");
+    box = "out"; tabs(); await load();
+  });
+
+  function tabs() { document.querySelectorAll("#boxTabs button").forEach(b => b.classList.toggle("on", b.dataset.b === box)); }
+  document.querySelectorAll("#boxTabs button").forEach(b => b.onclick = () => { box = b.dataset.b; tabs(); draw(); });
+
+  function draw() {
+    const list = box === "in" ? inbox : sent;
+    id("mList").innerHTML = list.map(m => {
+      const ids = m.recipientIds || [];
+      const who = box === "in" ? `From ${esc(m.actorName || "someone")}` : `To ${esc(ids.length > 3 ? `${ids.length} people` : ids.map(nameOf).join(", "))}`;
+      return `<div class="row"><div class="row-main"><b>${who}</b><span style="white-space:pre-wrap">${esc(m.detail)}</span><span>${esc(K.when(m.createdAt))}</span></div>${box === "in" && staff.some(s => s.id === m.actorId) ? `<div class="row-side"><button class="btn sm" data-reply="${esc(m.actorId)}" type="button">Reply</button></div>` : ""}</div>`;
+    }).join("") || `<div class="empty">${box === "in" ? "No messages for you yet." : "You have not sent any messages yet."}</div>`;
+    id("mList").querySelectorAll("[data-reply]").forEach(b => b.onclick = () => reply(b.dataset.reply));
+  }
+
+  async function load() {
+    try {
+      const col = K.db.collection("portalNotifications");
+      const [a, b] = await Promise.all([col.where("recipientIds", "array-contains", me.id).get(), col.where("actorId", "==", me.id).get()]);
+      const read = snap => snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => m.type === "message").sort((x, y) => K.millis(y.createdAt) - K.millis(x.createdAt)).slice(0, 60);
+      inbox = read(a).filter(m => m.actorId !== me.id); sent = read(b);
+      draw();
+    } catch (e) { id("mList").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
+  }
+  await load();
+})();
+</script>
+</body>
+</html>
