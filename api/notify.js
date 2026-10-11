@@ -5,6 +5,17 @@
 // The pages never talk to Gmail or to phones directly.
 const { getAdmin, readBody, list, fail, requireUser, roleOf, getSettings, resolveStaffIds, sendPush, sendEmail, emails } = require("./_lib");
 
+// Tells the devices of the people involved that their inbox has something new, so they download it.
+// Everyone else keeps using the copy saved on their device.
+async function touchInboxes(db, { ids = [], roles = [], actor = "", adminMessage = false }) {
+    const now = Date.now(), update = {};
+    ids.forEach(id => { update["in_" + id] = now; });
+    roles.forEach(role => { update["inr_" + role] = now; });
+    if (actor) update["out_" + actor] = now;
+    if (adminMessage) update.adminMsg = now;
+    try { await db.collection("sync").doc("stamps").set(update, { merge: true }); } catch (error) { console.error("stamps:", error); }
+}
+
 const MAX_ATTACHMENT_BYTES = 2.5 * 1024 * 1024;
 const EMAIL_KINDS = ["leave", "duty", "annual", "general"];
 
@@ -38,6 +49,7 @@ module.exports = async function handler(req, res) {
                 actorId: user.uid, actorName: user.name,
                 createdAt: fb.firestore.FieldValue.serverTimestamp()
             });
+            await touchInboxes(db, { ids: to, actor: user.uid });
             let push = null;
             try { push = await sendPush(db, new Set(to), { title: heading, message: detail, data: { type, notificationId: ref.id, url: "messages.html" } }); }
             catch (error) { console.error("message push:", error); push = { error: error?.message || "Push failed" }; }
@@ -54,6 +66,7 @@ module.exports = async function handler(req, res) {
                 createdAt: fb.firestore.FieldValue.serverTimestamp()
             });
             out.inbox = ref.id;
+            await touchInboxes(db, { ids: recipientIds, roles: recipientRoles, actor: user.uid, adminMessage: type === "admin-message" });
             if (body.push !== false) {
                 try {
                     const ids = await resolveStaffIds(db, recipientIds, recipientRoles);
