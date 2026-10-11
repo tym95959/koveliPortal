@@ -210,12 +210,11 @@
     const label = aud === "all" ? "Everyone" : byRole ? byRole : aud === "chosen" ? `${chosen.length} chosen` : K.roleLabel(aud) + "s";
     const res = await K.api("/api/notify", { ...to, title, detail, type: "admin-message", popup: true, url: "index.html", sourceId: label });
     id("mTitle").value = id("mBody").value = "";
-    K.toast(`Message sent. Phone alerts reached ${res.push?.sent || 0} device${res.push?.sent === 1 ? "" : "s"}.`, "ok"); history();
+    K.toast(`Message sent. Phone alerts reached ${res.push?.sent || 0} device${res.push?.sent === 1 ? "" : "s"}.`, "ok"); history(true);
   });
-  async function history() {
+  async function history(force) {
     try {
-      const snap = await K.db.collection("portalNotifications").where("type", "==", "admin-message").get();
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => K.millis(b.createdAt) - K.millis(a.createdAt)).slice(0, 30);
+      const list = (await K.load.adminMessages(force === true)).sort((a, b) => K.millis(b.createdAt) - K.millis(a.createdAt)).slice(0, 30);
       id("mHistory").innerHTML = list.map(m => `<div class="row"><div class="row-main"><b>${esc(m.title)}</b><span style="white-space:pre-wrap">${esc(m.detail)}</span><span>To ${esc(m.sourceId || "staff")}, ${esc(K.when(m.createdAt))}, by ${esc(m.actorName || "Admin")}</span></div><div class="row-side"><button class="btn sm danger" data-del="${esc(m.id)}" type="button">Remove</button></div></div>`).join("") || `<div class="empty">No messages sent yet.</div>`;
       id("mHistory").querySelectorAll("[data-del]").forEach(b => b.onclick = () => K.busy(b, async () => { await K.db.collection("portalNotifications").doc(b.dataset.del).delete(); history(); }));
     } catch (e) { id("mHistory").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
@@ -223,8 +222,11 @@
 
   // ---- emails ----
   const lines = v => [...new Set(String(v || "").split(/[\n,;]+/).map(x => x.trim().toLowerCase()).filter(Boolean))];
+  let emailsTouched = false;
+  ["eLeave", "eAttach", "eDuty", "eAnnual"].forEach(x => id(x).addEventListener("input", () => { emailsTouched = true; }));
   async function loadEmails() {
     const e = (await K.settings(true)).emails || {};
+    if (emailsTouched) return;   // never overwrite what is being typed
     id("eLeave").value = (e.leave || []).join("\n"); id("eAttach").value = (e.leaveAttachment || []).join("\n");
     id("eDuty").value = (e.duty || []).join("\n"); id("eAnnual").value = (e.annual || []).join("\n");
     if (!id("tEmail").value) id("tEmail").value = me.email || "";
@@ -234,7 +236,7 @@
     const bad = Object.values(emails).flat().find(x => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
     if (bad) return K.toast(`"${bad}" is not an email address.`, "bad");
     await K.db.collection("settings").doc("portal").set({ emails }, { merge: true });
-    await K.settings(true); K.toast("Email lists saved.", "ok");
+    emailsTouched = false; await K.settings(true); K.toast("Email lists saved.", "ok");
   });
   const result = (text, ok) => { const box = id("tResult"); box.hidden = false; box.className = "note " + (ok ? "ok" : "bad"); box.textContent = text; };
   id("tSend").onclick = () => K.busy(id("tSend"), async () => {
