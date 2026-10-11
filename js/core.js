@@ -152,15 +152,95 @@
 
   K.signOut = async () => {
     try { await forgetDevice(); } catch (_) {}
+    try { indexedDB.deleteDatabase("koveliData"); } catch (_) {}
     try { await firebase.auth().signOut(); } catch (_) {}
     location.href = "index.html";
+  };
+
+  // ---------- Saved copies on this device ----------
+  // Lists (staff, leave, annual leave, duty changes, inbox...) are kept in the browser's IndexedDB.
+  // One small document, sync/stamps, holds a number per list that goes up whenever that list changes.
+  // A page reads that one document, and only downloads a list again when its number has moved.
+  const TRACKED = { staff: "staff", settings: "settings", holidays: "holidays", leaveRequests: "leave", annualLeaveRequests: "annual", dutyChanges: "duty", portalNotifications: "notes" };
+  const KEEP_MS = 12 * 3600000;
+  let rawDb = null, stamps = null, stampsReady = null, stampListeners = [];
+
+  function bump(key) {
+    const value = Date.now();
+    if (stamps) stamps[key] = value;
+    try { rawDb.collection("sync").doc("stamps").set({ [key]: value }, { merge: true }).catch(e => console.warn("Stamp:", e.message)); } catch (_) {}
+  }
+  // Every write made through K.db to a tracked list also moves that list's number.
+  function trackedDb(real) {
+    rawDb = real;
+    const wrapDoc = (ref, key) => ({
+      id: ref.id, get: (...a) => ref.get(...a), onSnapshot: (...a) => ref.onSnapshot(...a),
+      set: async (...a) => { const r = await ref.set(...a); bump(key); return r; },
+      update: async (...a) => { const r = await ref.update(...a); bump(key); return r; },
+      delete: async (...a) => { const r = await ref.delete(...a); bump(key); return r; }
+    });
+    return {
+      collection(name) {
+        const col = real.collection(name), key = TRACKED[name];
+        if (!key) return col;
+        return {
+          where: (...a) => col.where(...a), orderBy: (...a) => col.orderBy(...a), limit: (...a) => col.limit(...a),
+          get: (...a) => col.get(...a), onSnapshot: (...a) => col.onSnapshot(...a),
+          doc: id => wrapDoc(id === undefined ? col.doc() : col.doc(id), key),
+          add: async value => { const r = await col.add(value); bump(key); return r; }
+        };
+      }
+    };
+  }
+  function watchStamps() {
+    if (stampsReady) return stampsReady;
+    stampsReady = new Promise(resolve => {
+      let first = true;
+      const done = () => { if (first) { first = false; resolve(); } };
+      try {
+        rawDb.collection("sync").doc("stamps").onSnapshot(snap => {
+          const before = stamps || {}, data = snap.exists ? (snap.data() || {}) : {}, next = { ...before };
+          Object.keys(data).forEach(k => { next[k] = Math.max(Number(before[k]) || 0, Number(data[k]) || 0); });
+          const changed = Object.keys(next).filter(k => next[k] !== before[k]);
+          stamps = next; done();
+          if (changed.length) stampListeners.forEach(fn => { try { fn(changed); } catch (_) {} });
+        }, error => { console.warn("Saved copies are off:", error.message); done(); });
+      } catch (_) { done(); }
+      setTimeout(done, 5000);
+    });
+    return stampsReady;
+  }
+  let dataDb = null;
+  function dataStore() {
+    return dataDb || (dataDb = new Promise((resolve, reject) => {
+      const r = indexedDB.open("koveliData", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("lists");
+      r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
+    }));
+  }
+  async function dataGet(key) { const d = await dataStore(); return new Promise((res, rej) => { const q = d.transaction("lists").objectStore("lists").get(key); q.onsuccess = () => res(q.result || null); q.onerror = () => rej(q.error); }); }
+  async function dataPut(key, value) { const d = await dataStore(); return new Promise((res, rej) => { const t = d.transaction("lists", "readwrite"); t.objectStore("lists").put(value, key); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+
+  // Returns the saved copy of a list when nothing has changed, otherwise downloads it and saves it.
+  K.reads = { saved: 0, loaded: 0 };
+  K.cached = async (name, keys, fetch, force) => {
+    await watchStamps();
+    const sig = stamps ? keys.map(k => stamps[k] || 0).join(".") : null;
+    const key = `${K.me.id}:${K.me.role}:${name}`;
+    if (!force && sig !== null) {
+      try { const c = await dataGet(key); if (c && c.sig === sig && Date.now() - c.at < KEEP_MS) { K.reads.saved++; return c.value; } } catch (_) {}
+    }
+    const value = await fetch();
+    K.reads.loaded++;
+    if (sig !== null) { try { await dataPut(key, { sig, at: Date.now(), value: JSON.parse(JSON.stringify(value, (k, v) => v && typeof v.toMillis === "function" ? v.toMillis() : v)) }); } catch (_) {} }
+    return value;
   };
 
   function pageName() { return (location.pathname.split("/").pop() || "index.html").toLowerCase(); }
 
   // Call once per page. Returns the signed-in person, or null on the sign-in page.
   K.start = async ({ need = "any", shell = true } = {}) => {
-    K.db = firebase.firestore();
+    K.db = trackedDb(firebase.firestore());
     K.stamp = () => firebase.firestore.FieldValue.serverTimestamp();
     const onIndex = pageName() === "index.html";
     const toSignIn = () => { location.replace("index.html?next=" + encodeURIComponent(pageName() + location.search)); };
@@ -193,6 +273,7 @@
       location.replace("index.html");
       return null;
     }
+    watchStamps();
     if (shell) { drawShell(); startInbox(); refreshAlerts(); }
     return K.me;
   };
@@ -275,10 +356,15 @@
       if (count) count.textContent = unread().length ? String(Math.min(unread().length, 99)) : "";
       showPopup();
     };
-    const read = snap => snap.docs.map(d => { const x = d.data() || {}; return { id: d.id, ...x, time: K.millis(x.createdAt) || Date.now() }; });
-    const col = K.db.collection("portalNotifications");
-    col.where("recipientIds", "array-contains", K.me.id).onSnapshot(s => { parts.mine = read(s); rebuild(); }, e => console.warn("Inbox:", e.message));
-    col.where("recipientRoles", "array-contains", K.me.role).onSnapshot(s => { parts.role = read(s); rebuild(); }, e => console.warn("Inbox:", e.message));
+    const read = list => list.map(x => ({ ...x, time: K.millis(x.createdAt) || Date.now() }));
+    // Uses the saved copy; downloads again only when something new was sent to me or to my role.
+    const refresh = async () => {
+      try { const [mine, role] = await Promise.all([K.load.inboxMine(), K.load.inboxRole()]); parts.mine = read(mine); parts.role = read(role); rebuild(); }
+      catch (e) { console.warn("Inbox:", e.message); }
+    };
+    const mineKeys = ["in_" + K.me.id, "inr_" + K.me.role, "notes"];
+    stampListeners.push(changed => { if (changed.some(k => mineKeys.includes(k))) refresh(); });
+    refresh();
   }
 
   function openInbox() {
@@ -386,18 +472,20 @@
   }
 
   // ---------- Shared data ----------
+  const docs = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
   let staffCache = null, settingsCache = null;
   K.staff = async force => {
     if (!staffCache || force) {
-      const snap = await K.db.collection("staff").get();
-      staffCache = snap.docs.map(d => ({ id: d.id, ...d.data(), rcno: d.data().rcno || d.id })).filter(s => s.name).sort((a, b) => a.name.localeCompare(b.name));
+      const list = await K.cached("staff", ["staff"], async () => docs(await K.db.collection("staff").get()), force);
+      staffCache = list.map(d => ({ ...d, rcno: d.rcno || d.id })).filter(s => s.name).sort((a, b) => a.name.localeCompare(b.name));
     }
     return staffCache;
   };
+  K.holidays = force => K.cached("holidays", ["holidays"], async () => docs(await K.db.collection("holidays").get()), force);
   K.settings = async force => {
     if (!settingsCache || force) {
-      const snap = await K.db.collection("settings").doc("portal").get();
-      settingsCache = { annualCapacity: 2, dutyLimit: true, emails: {}, ...(snap.exists ? snap.data() : {}) };
+      const saved = await K.cached("settings", ["settings"], async () => { const snap = await K.db.collection("settings").doc("portal").get(); return snap.exists ? snap.data() : {}; }, force);
+      settingsCache = { annualCapacity: 2, dutyLimit: true, emails: {}, ...saved };
     }
     return settingsCache;
   };
@@ -475,17 +563,14 @@
 
   // ---------- Approved leave and approved swaps, laid over the published roster ----------
   // The roster shows them the moment Admin approves, without republishing the roster.
-  let overlayCache = null, overlayAt = 0;
   K.rosterOverlay = async force => {
-    if (!overlayCache || force || Date.now() - overlayAt > 60000) {
-      const [swaps, leave] = await Promise.all([
+    const { swaps, leave } = await K.cached("overlay", ["duty", "annual"], async () => {
+      const [s, l] = await Promise.all([
         K.db.collection("dutyChanges").where("status", "==", "approved").get(),
         K.db.collection("annualLeaveRequests").where("status", "==", "approved").get()
       ]);
-      overlayCache = { swaps: swaps.docs.map(d => d.data()), leave: leave.docs.map(d => d.data()) };
-      overlayAt = Date.now();
-    }
-    const { swaps, leave } = overlayCache;
+      return { swaps: s.docs.map(d => d.data()), leave: l.docs.map(d => d.data()) };
+    }, force);
     // Returns { code, note } for one person on one date, starting from the published code.
     return (staffId, isoDate, base) => {
       const id = String(staffId);
@@ -501,18 +586,22 @@
   };
 
   // ---------- Request lists (each person only loads what they are allowed to see) ----------
-  const docs = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
   K.load = {
-    leave: async () => docs(await (K.isManager ? K.db.collection("leaveRequests") : K.db.collection("leaveRequests").where("staffId", "==", K.me.id)).get()),
-    annual: async () => docs(await K.db.collection("annualLeaveRequests").get()),
-    duty: async () => {
+    leave: force => K.cached("leave", ["leave"], async () => docs(await (K.isManager ? K.db.collection("leaveRequests") : K.db.collection("leaveRequests").where("staffId", "==", K.me.id)).get()), force),
+    annual: force => K.cached("annual", ["annual"], async () => docs(await K.db.collection("annualLeaveRequests").get()), force),
+    duty: force => K.cached("duty", ["duty"], async () => {
       const col = K.db.collection("dutyChanges");
       if (K.isManager) return docs(await col.get());
       const [sent, received] = await Promise.all([col.where("requesterId", "==", K.me.id).get(), col.where("acceptStaffId", "==", K.me.id).get()]);
       const map = new Map();
       [...docs(sent), ...docs(received)].forEach(r => map.set(r.id, r));
       return [...map.values()];
-    }
+    }, force),
+    // Messages and notices sent to me, the ones I sent, and (Admin) the notices sent to everyone.
+    inboxMine: force => K.cached("inbox", ["in_" + K.me.id, "notes"], async () => docs(await K.db.collection("portalNotifications").where("recipientIds", "array-contains", K.me.id).get()), force),
+    inboxRole: force => K.cached("inboxRole", ["inr_" + K.me.role, "notes"], async () => docs(await K.db.collection("portalNotifications").where("recipientRoles", "array-contains", K.me.role).get()), force),
+    sent: force => K.cached("sent", ["out_" + K.me.id, "notes"], async () => docs(await K.db.collection("portalNotifications").where("actorId", "==", K.me.id).get()), force),
+    adminMessages: force => K.cached("adminMessages", ["adminMsg", "notes"], async () => docs(await K.db.collection("portalNotifications").where("type", "==", "admin-message").get()), force)
   };
   K.statusOf = r => String(r.status || "pending").toLowerCase();
 
