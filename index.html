@@ -13,6 +13,235 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css?v=3">
+<style>
+/* ===== Dashboard box styling (layered on top of app.css) ===== */
+#dash {
+  --k-ink: #0E2A33;
+  --k-deep: #123A45;
+  --k-teal: #1F6F7A;
+  --k-sea: #2BA3A8;
+  --k-foam: #E6F4F3;
+  --k-sand: #F7F3EC;
+  --k-coral: #E2674F;
+  --k-coral-soft: #FCEDE9;
+  --k-line: rgba(14, 42, 51, .09);
+  --k-shadow: 0 1px 2px rgba(14, 42, 51, .06), 0 8px 24px -12px rgba(14, 42, 51, .18);
+  --k-shadow-hover: 0 2px 4px rgba(14, 42, 51, .08), 0 16px 32px -14px rgba(14, 42, 51, .28);
+  --k-radius: 16px;
+}
+
+/* ---- Page header ---- */
+#dash .page-head h1 {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--k-ink);
+}
+#dash .page-head p { color: var(--k-teal); font-weight: 500; }
+
+/* ---- Duty board: departures-board look ---- */
+#dash .board {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--k-radius);
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(43, 163, 168, .35) 0%, transparent 55%),
+    linear-gradient(135deg, var(--k-ink) 0%, var(--k-deep) 60%, var(--k-teal) 100%);
+  color: #fff;
+  box-shadow: 0 18px 40px -20px rgba(14, 42, 51, .6);
+}
+#dash .board::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 4px);
+  pointer-events: none;
+}
+#dash .board-head {
+  padding: 16px 20px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .1);
+  background: transparent;
+}
+#dash .board-head h2 {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0;
+  color: #fff;
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 14px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase;
+}
+#dash .board-head h2::before {
+  content: "";
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #5EE0C6;
+  box-shadow: 0 0 0 4px rgba(94, 224, 198, .2);
+  animation: kPulse 2.4s ease-in-out infinite;
+}
+@keyframes kPulse { 50% { box-shadow: 0 0 0 7px rgba(94, 224, 198, 0); } }
+#dash .board-row {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(96px, 140px) auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  background: transparent;
+}
+#dash .board-day b {
+  display: block;
+  color: #fff;
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 18px; font-weight: 700;
+}
+#dash .board-day span { color: rgba(255, 255, 255, .62); font-size: 13px; }
+#dash .board-time {
+  min-width: 92px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .28);
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: inset 0 -12px 18px -14px rgba(0, 0, 0, .6);
+  color: #FFD27A;
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 26px; font-weight: 800;
+  letter-spacing: .06em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+#dash .board-names, #dash .board-names .muted { color: rgba(255, 255, 255, .72); }
+#dash .board-foot {
+  position: relative; z-index: 1;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, .18);
+  color: rgba(255, 255, 255, .7);
+  font-size: 13px;
+}
+#dash .board-foot a { color: #9BE7DE; font-weight: 600; text-decoration: none; }
+#dash .board-foot a:hover { text-decoration: underline; }
+
+/* ---- Tiles ---- */
+#dash .tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+}
+#dash .tile {
+  --accent: var(--k-sea);
+  --wash: var(--k-foam);
+  position: relative;
+  overflow: hidden;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 18px 18px 16px 22px;
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius);
+  background: linear-gradient(160deg, #fff 40%, var(--wash) 140%);
+  box-shadow: var(--k-shadow);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+#dash .tile:nth-child(2) { --accent: #3F7FD6; --wash: #E8F0FB; }
+#dash .tile:nth-child(3) { --accent: #D99A2B; --wash: #FBF2E1; }
+#dash .tile:nth-child(4) { --accent: #7A5BD0; --wash: #EFEAFB; }
+#dash .tile.warn          { --accent: var(--k-coral); --wash: var(--k-coral-soft); }
+#dash .tile::before {
+  content: "";
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 5px;
+  background: var(--accent);
+}
+#dash .tile::after {
+  content: "";
+  position: absolute; right: -28px; top: -28px;
+  width: 96px; height: 96px; border-radius: 50%;
+  background: var(--accent);
+  opacity: .08;
+}
+#dash .tile:hover { transform: translateY(-2px); box-shadow: var(--k-shadow-hover); }
+#dash .tile b {
+  color: var(--accent);
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 40px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+#dash .tile span {
+  color: #4A5F66;
+  font-size: 13.5px; font-weight: 500; line-height: 1.35;
+}
+
+/* ---- Panels ---- */
+#dash .panel {
+  overflow: hidden;
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius);
+  background: #fff;
+  box-shadow: var(--k-shadow);
+}
+#dash .panel-head {
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--k-line);
+  background: linear-gradient(180deg, var(--k-sand) 0%, #fff 100%);
+}
+#dash .panel-head h2 {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0;
+  color: var(--k-ink);
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 19px; font-weight: 700;
+}
+#dash .panel-head h2::before {
+  content: "";
+  width: 4px; height: 18px; border-radius: 4px;
+  background: linear-gradient(180deg, var(--k-sea), var(--k-teal));
+}
+#dash .panel-head p { margin: 4px 0 0 14px; color: #6B7F85; font-size: 13px; }
+
+/* ---- Rows ---- */
+#dash .rows { padding: 6px; }
+#dash .row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 2px 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  transition: background .15s ease, transform .15s ease;
+}
+#dash .row + .row { box-shadow: 0 -1px 0 var(--k-line); }
+#dash .row:hover { background: var(--k-foam); box-shadow: none; }
+#dash .row:hover + .row { box-shadow: none; }
+#dash a.row:hover { transform: translateX(2px); }
+#dash .row-main { min-width: 0; }
+#dash .row-main b { display: block; color: var(--k-ink); font-weight: 600; }
+#dash .row-main span { display: block; margin-top: 2px; color: #6B7F85; font-size: 13.5px; }
+#dash .row.today {
+  background: linear-gradient(90deg, rgba(43, 163, 168, .14), rgba(43, 163, 168, .02));
+  box-shadow: inset 3px 0 0 var(--k-sea);
+}
+#dash .row-side .btn.sm { border-radius: 999px; padding-inline: 14px; }
+
+/* ---- Empty states ---- */
+#dash .empty {
+  margin: 10px;
+  padding: 22px 16px;
+  border: 1.5px dashed rgba(31, 111, 122, .25);
+  border-radius: 12px;
+  background: var(--k-sand);
+  color: #6B7F85;
+  text-align: center;
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  #dash .board-row { grid-template-columns: 1fr auto; }
+  #dash .board-names { grid-column: 1 / -1; }
+  #dash .board-time { font-size: 22px; min-width: 80px; }
+  #dash .tiles { grid-template-columns: 1fr 1fr; gap: 10px; }
+  #dash .tile b { font-size: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #dash .tile, #dash .row { transition: none; }
+  #dash .board-head h2::before { animation: none; }
+}
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
@@ -160,7 +389,7 @@
     }
 
     // PIN pad
-    const dots = () => { id("pinDots").textContent = pin ? "●".repeat(pin.length) : " "; };
+    const dots = () => { id("pinDots").textContent = pin ? "●".repeat(pin.length) : " "; };
     const press = k => {
       if (k === "ok") { if (pin.length < 4) { id("codeMsg").className = "msg"; id("codeMsg").textContent = "Enter your whole PIN, then press OK."; return; } return submit(pin); }
       if (k === "del") pin = pin.slice(0, -1); else if (pin.length < 8) pin += k;
