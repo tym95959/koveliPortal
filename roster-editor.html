@@ -4749,5 +4749,425 @@ async function loadAdvisorPreviousThree(staffId){
 <script>
 document.addEventListener("DOMContentLoaded",()=>{const target=document.getElementById("rosterStatus");if(!target)return;const b=document.createElement("button");b.type="button";b.className="btn no-print";return;});
 </script>
+<!-- =====================================================================
+     KOVELI ROSTER EDITOR — NEW THEME + LOCAL / INDEXEDDB STORAGE
+     Paste this whole block just before </body> in the roster editor page.
+     Nothing else in the page needs to change.
+     ===================================================================== -->
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700;800&display=swap');
+
+/* ---------- Palette (matches the staff portal: deep lagoon + sand + gold) ---------- */
+:root{
+  --k-ink:#0E2A33; --k-ink2:#16404B; --k-teal:#0F7C80; --k-teal-soft:#E3F1EF;
+  --k-sand:#F4F1EA; --k-card:#FFFFFF; --k-line:#E1DCD1; --k-gold:#D9A441;
+  --k-muted:#5E7177; --k-good:#2E7D57; --k-bad:#B42318;
+  /* re-point the page's own variables */
+  --teal:var(--k-teal); --teal2:var(--k-ink); --ink:var(--k-ink); --line:var(--k-line); --bg:var(--k-sand);
+}
+
+/* ---------- Base ---------- */
+html,body{font-family:"Barlow",Arial,Helvetica,sans-serif!important;background:var(--k-sand)!important;color:var(--k-ink)}
+body{padding:14px}
+h1,h2,h3,.btn,.rt-label,.mm-title,.part-btn{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif}
+::selection{background:#F3DFB4}
+
+/* ---------- Header ---------- */
+html body .topbar{background:var(--k-ink);border-radius:14px;padding:14px 18px;box-shadow:0 8px 24px rgba(14,42,51,.22);border-bottom:3px solid var(--k-gold)}
+html body .topbar h1{font-size:21px;font-weight:800;letter-spacing:.2px}
+html body .topbar small{color:#BFD3D6;opacity:1;font-size:12px}
+html body .topbar a{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.25)!important}
+html body .topbar a:hover{background:rgba(255,255,255,.16)}
+
+/* ---------- Cards & panels ---------- */
+html body .card{border:1px solid var(--k-line);border-radius:14px;box-shadow:0 2px 10px rgba(14,42,51,.06);margin-top:14px}
+html body .card-head{background:var(--k-card);border-bottom:1px solid var(--k-line);padding:12px 14px}
+html body .card-head h2{font-size:16px;font-weight:800;color:var(--k-ink)}
+html body .card-head h2::before{content:"";display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--k-gold);margin-right:8px;vertical-align:-1px}
+html body .card-body{padding:12px}
+html body .top-date-panel{background:var(--k-card);border:1px solid var(--k-line);border-radius:14px;box-shadow:0 2px 10px rgba(14,42,51,.06);margin-top:14px;padding:12px 14px}
+html body .setup-column{background:#FBFAF7;border-color:var(--k-line);border-radius:12px}
+html body .setup-column h3{color:var(--k-ink);border-bottom-color:var(--k-line);font-size:13px;font-weight:800}
+html body .setting-toggle{border-color:var(--k-line);color:var(--k-teal);border-radius:7px}
+html body .auto-note{background:var(--k-teal-soft);border:1px solid #C8E2DE;border-left:4px solid var(--k-teal);border-radius:9px;color:#1F3D44}
+html body .roster-manager{background:var(--k-card);border-color:var(--k-line);border-radius:12px;padding:10px}
+html body .daily-summary,html body .muted{color:var(--k-muted)}
+html body .request-chip{border-color:var(--k-line);border-radius:8px}
+
+/* ---------- Form controls ---------- */
+html body .field label{color:var(--k-muted);text-transform:uppercase;letter-spacing:.05em;font-size:10px}
+html body .field input,html body .field select,html body .rt-find,html body .prev-view-ctl select,html body .staff-search input[type=text]{border:1px solid #D6D0C3;border-radius:8px;background:#fff;color:var(--k-ink)}
+html body input:focus,html body select:focus,html body textarea:focus{outline:none;border-color:var(--k-teal);box-shadow:0 0 0 3px rgba(15,124,128,.18)}
+html body .staff-search-menu{border-color:var(--k-line);border-radius:10px}
+html body .staff-search-option:hover,html body .staff-search-option.active{background:var(--k-teal-soft)}
+
+/* ---------- Buttons ---------- */
+html body .btn{border-radius:8px;background:#ECE8DE;color:var(--k-ink);font-weight:700;letter-spacing:.2px;transition:filter .15s,transform .05s,box-shadow .15s}
+html body .btn:hover:not(:disabled){filter:brightness(.95)}
+html body .btn:active:not(:disabled){transform:translateY(1px)}
+html body .btn.primary{background:var(--k-teal);color:#fff}
+html body .btn.dark{background:var(--k-ink);color:#fff}
+html body .btn.warn{background:var(--k-gold);color:#2b2000}
+html body .btn.danger{background:var(--k-bad);color:#fff}
+html body .rt-steps .btn:nth-of-type(1){background:var(--k-gold)!important;color:#2b2000!important}
+html body .rt-steps .btn:nth-of-type(2){background:var(--k-teal)!important;color:#fff!important}
+html body .rt-steps .btn:nth-of-type(3){background:var(--k-good)!important;color:#fff!important}
+html body .rt-steps .btn:nth-of-type(4){background:var(--k-ink)!important;color:#fff!important}
+html body .rt-num{background:rgba(255,255,255,.3)}
+html body #swapBtn.on{background:var(--k-gold);color:#2b2000}
+html body .hl-chip{border-color:#D6D0C3}
+html body .hl-chip.on{background:var(--k-ink);border-color:var(--k-ink)}
+html body .more-menu{border-color:var(--k-line);border-radius:12px;box-shadow:0 14px 34px rgba(14,42,51,.2)}
+html body .more-menu button:hover{background:var(--k-teal-soft)}
+
+/* ---------- Roster grid ---------- */
+html body .roster-wrap{border-color:var(--k-line);border-radius:10px;scrollbar-width:thin;scrollbar-color:#C9C2B3 transparent}
+html body .roster-table thead th,html body #rosterStickyHeader th{background:var(--k-ink)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border-color:#24505B!important}
+html body .roster-table thead th *,html body #rosterStickyHeader th *{color:#fff!important;-webkit-text-fill-color:#fff!important}
+html body .roster-table thead th.weekend,html body #rosterStickyHeader th.weekend{background:#6B5420!important}
+html body .roster-table thead th.today,html body #rosterStickyHeader th.today{background:#14505C!important;color:#fff!important;-webkit-text-fill-color:#fff!important;box-shadow:inset 0 -3px 0 var(--k-gold)!important}
+html body .roster-table thead th.prev-head{background:#7A8789!important}
+html body .roster-table .role-row td{background:#EDE7DA!important;color:var(--k-ink)!important;letter-spacing:.06em;text-transform:uppercase}
+html body .roster-table .role-row.drop-role td{background:#F3DFB4!important;outline-color:var(--k-gold)}
+html body .staff-cell{background:#fff}
+html body .roster-no{background:#EDE7DA}
+html body .drag-mini{background:var(--k-teal-soft);color:var(--k-teal)}
+html body .duty-cell:hover{outline-color:var(--k-gold)!important}
+html body .popup{border-color:var(--k-line);border-radius:12px;box-shadow:0 14px 36px rgba(14,42,51,.28)}
+
+/* ---------- Summary tables ---------- */
+html body #countSummary thead th,html body #rcSummary thead th,html body #dailyCountFloatingHeader th{background:var(--k-ink)!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+html body #countSummary thead th.weekend,html body #rcSummary thead th.weekend{background:#6B5420!important}
+html body #dailyCountFloatingHeader,html body #dailyCountFloatingHeader table{background:var(--k-ink)!important}
+html body .table-wrap{border-color:var(--k-line);border-radius:10px}
+
+/* ---------- Status / toast / dialogs ---------- */
+html body .status{border-radius:9px}
+html body #koveliToast{background:var(--k-ink);border-left:4px solid var(--k-gold)}
+html body #rosterMessageBox{border-radius:16px}
+html body #rosterMessageBox .rm-ok{background:var(--k-teal)}
+html body .check-panel{border-color:var(--k-line);border-radius:12px}
+
+/* ---------- Storage row ---------- */
+.rt-storage{padding:8px 10px;border:1px dashed #D6D0C3;border-radius:10px;background:#FBFAF7}
+.rt-storage .btn{height:34px}
+#saveLocalBtn{background:#fff;border:1px solid #D6D0C3}
+#saveIdbBtn{background:var(--k-teal-soft);color:var(--k-teal);border:1px solid #BFDDD9}
+#loadIdbBtn{background:var(--k-ink);color:#fff}
+.store-state{font-size:11px;color:var(--k-muted);display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.store-state b{color:var(--k-ink);margin-right:8px}
+.store-dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#C9C2B3}
+.store-dot.on{background:var(--k-good)}
+
+#idbOverlay{position:fixed;inset:0;background:rgba(14,42,51,.48);z-index:20050;display:none;align-items:center;justify-content:center;padding:16px}
+#idbOverlay.open{display:flex}
+#idbBox{width:min(640px,96vw);max-height:86vh;display:flex;flex-direction:column;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 24px 60px rgba(14,42,51,.35)}
+.idb-head{background:var(--k-ink);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:3px solid var(--k-gold)}
+.idb-head h3{margin:0;font-size:17px;font-weight:800}
+.idb-head small{display:block;color:#BFD3D6;font-size:11px;margin-top:2px}
+.idb-close{border:0;background:rgba(255,255,255,.12);color:#fff;width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer}
+.idb-body{padding:12px 14px;overflow:auto;flex:1}
+.idb-month{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--k-muted);margin:10px 2px 6px}
+.idb-month:first-child{margin-top:0}
+.idb-item{display:flex;gap:10px;align-items:center;border:1px solid var(--k-line);border-radius:10px;padding:9px 11px;margin-bottom:7px;background:#FBFAF7}
+.idb-item .meta{flex:1;min-width:0}
+.idb-item .meta b{display:block;font-size:13px}
+.idb-item .meta small{display:block;color:var(--k-muted);font-size:11px;margin-top:2px}
+.idb-kind{display:inline-block;font-size:9px;font-weight:800;padding:2px 7px;border-radius:9px;background:var(--k-teal-soft);color:var(--k-teal);margin-right:5px;vertical-align:1px}
+.idb-kind.auto{background:#ECE8DE;color:#6b6250}
+.idb-item .btn{height:30px;font-size:11px;padding:0 10px}
+.idb-empty{padding:22px;text-align:center;color:var(--k-muted)}
+.idb-foot{padding:10px 14px;border-top:1px solid var(--k-line);font-size:11px;color:var(--k-muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.idb-foot label{display:inline-flex;gap:6px;align-items:center;color:var(--k-ink);font-weight:600}
+
+/* ---------- Print stays clean and ink-light ---------- */
+@media print{
+  html body{background:#fff!important}
+  html body .roster-table thead th,html body .roster-table thead th *{background:#fff!important;color:#000!important;-webkit-text-fill-color:#000!important;box-shadow:none!important}
+  html body .roster-table .role-row td{background:#eee!important;text-transform:none}
+  .rt-storage,#idbOverlay{display:none!important}
+}
+</style>
+
+<script>
+/* =====================================================================
+   Save to Local  — writes the working roster + settings to localStorage
+                    and reads them back to confirm.
+   Save to IndexedDB — stores a dated checkpoint (last 8 per month kept)
+                    plus the working copy, and confirms the write.
+   Load from IndexedDB — lists saved checkpoints and auto-saved working
+                    copies for every month, and restores the one you pick.
+   Ctrl+S saves to both.
+   ===================================================================== */
+(function () {
+  "use strict";
+  const SNAP_PREFIX = "koveliRosterSnapshotV1:";
+  const DRAFT_PREFIX = "koveliRosterDraftV1:";
+  const MARKS_KEY = "koveliRosterSaveMarksV1";
+  const KEEP_PER_MONTH = 8;
+
+  const monthKeyOf = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
+  const monthName = (y, m) => new Date(y, m - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
+  const timeText = ts => ts ? new Date(ts).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "not yet";
+  const sizeText = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+  const stopAutoSave = () => { try { clearTimeout(localSaveTimer); } catch (_) {} };
+
+  function countCells(rd) { let n = 0; for (const days of Object.values(rd || {})) n += Object.values(days || {}).filter(Boolean).length; return n; }
+  function rangeText(d) {
+    if (!d || !d.rosterStartDate || !d.rosterEndDate) return "";
+    const f = s => new Date(s + "T00:00:00").toLocaleString("en-GB", { day: "numeric", month: "short" });
+    return `${f(d.rosterStartDate)} – ${f(d.rosterEndDate)}`;
+  }
+
+  // ---------- last-saved marks ----------
+  function readMarks() { try { return JSON.parse(localStorage.getItem(MARKS_KEY) || "{}"); } catch (_) { return {}; } }
+  function markSaved(kind, ts) { const m = readMarks(); m[kind] = ts; try { localStorage.setItem(MARKS_KEY, JSON.stringify(m)); } catch (_) {} renderMarks(); }
+  function renderMarks() {
+    const el = document.getElementById("storeState"); if (!el) return;
+    const m = readMarks();
+    el.innerHTML = `<span class="store-dot ${m.local ? "on" : ""}"></span>Local: <b>${esc(timeText(m.local))}</b>` +
+                   `<span class="store-dot ${m.idb ? "on" : ""}"></span>IndexedDB: <b>${esc(timeText(m.idb))}</b>`;
+  }
+
+  // ---------- snapshot of everything on screen ----------
+  function captureWorkingSnapshot() {
+    const { year, month } = getMonthInfo(), savedAt = Date.now();
+    const rosterStartDate = document.getElementById("rosterStartDate")?.value || "";
+    const rosterEndDate = document.getElementById("rosterEndDate")?.value || "";
+    const draft = {
+      part1: buildRosterPart(1), part2: buildRosterPart(2),
+      rosterData: safeClone(rosterData), temporaryRosterOrder: safeClone(temporaryRosterOrder),
+      rosterStartDate, rosterEndDate, customTimings: safeClone(customTimings), year, month, savedAt
+    };
+    return {
+      app: "koveli-roster-snapshot", version: 1, savedAt, year, month,
+      global: { rosterSettings: safeClone(rosterSettings), localStaff: safeClone(localStaff), officerRules: safeClone(officerRules), autoConfig: safeClone(autoConfig), customTimings: safeClone(customTimings), savedAt },
+      draft,
+      manual: safeClone(manualDutyDraft),
+      carriedOff: [...carriedOffSet()],
+      cells: { generated: [...generatedCells], requested: [...requestedCells], pattern: [...patternCells] },
+      stats: { staff: Object.keys(rosterData || {}).length, cells: countCells(rosterData) }
+    };
+  }
+
+  // ---------- Save to Local (localStorage) ----------
+  function saveToLocal() {
+    stopAutoSave();
+    try {
+      const snap = captureWorkingSnapshot();
+      const draftJson = JSON.stringify(snap.draft);
+      localStorage.setItem(LOCAL_GLOBAL_KEY, JSON.stringify(snap.global));
+      localStorage.setItem(localMonthKey(), draftJson);
+      localStorage.setItem(LOCAL_ACTIVE_DRAFT_KEY, draftJson);
+      localStorage.setItem(manualDutyKey(), JSON.stringify({ rosterData: snap.manual, savedAt: snap.savedAt }));
+      saveCarriedOff();
+      const back = JSON.parse(localStorage.getItem(localMonthKey()) || "null");
+      if (!back || JSON.stringify(back.rosterData) !== JSON.stringify(snap.draft.rosterData)) throw new Error("the saved copy could not be read back");
+      markSaved("local", snap.savedAt);
+      showToast(`Saved to Local: ${monthName(snap.year, snap.month)}, ${snap.stats.cells} duties (${sizeText(draftJson.length)}). Firebase is unchanged.`);
+      return true;
+    } catch (e) {
+      const full = e && (e.name === "QuotaExceededError" || /quota/i.test(e.message || ""));
+      showRosterMessage(full ? "This browser's local storage is full. Use Save to IndexedDB instead, or delete old roster history from the More menu." : "Save to Local failed: " + (e.message || e), "error", "Save to Local");
+      return false;
+    }
+  }
+
+  // ---------- Save to IndexedDB ----------
+  async function pruneSnapshots(mk) {
+    const keys = (await rosterIdbKeys()).filter(k => typeof k === "string" && k.startsWith(SNAP_PREFIX + mk + ":")).sort().reverse();
+    for (const k of keys.slice(KEEP_PER_MONTH)) await rosterIdbDelete(k);
+  }
+  async function saveToIdb(btn) {
+    stopAutoSave();
+    const label = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    try {
+      if (!window.indexedDB) throw new Error("IndexedDB is not available in this browser.");
+      await flushRosterIdb();                                 // let any pending auto-save finish first
+      const snap = captureWorkingSnapshot(), mk = monthKeyOf(snap.year, snap.month);
+      const key = SNAP_PREFIX + mk + ":" + snap.savedAt;
+      await rosterIdbPut(key, snap);                          // dated checkpoint
+      await rosterIdbPut(LOCAL_GLOBAL_KEY, snap.global);      // working settings
+      await rosterIdbPut(DRAFT_PREFIX + mk, snap.draft);      // working roster copy
+      await rosterIdbPut(ROSTER_HISTORY_PREFIX + rosterPeriodId(snap.year, snap.month, 1), snap.draft.part1);
+      await rosterIdbPut(ROSTER_HISTORY_PREFIX + rosterPeriodId(snap.year, snap.month, 2), snap.draft.part2);
+      const back = await rosterIdbGet(key);
+      if (!back || JSON.stringify(back.draft?.rosterData) !== JSON.stringify(snap.draft.rosterData)) throw new Error("the checkpoint could not be read back");
+      await pruneSnapshots(mk);
+      try { navigator.storage?.persist?.(); } catch (_) {}   // ask the browser not to evict roster data
+      markSaved("idb", snap.savedAt);
+      showToast(`Saved to IndexedDB: checkpoint for ${monthName(snap.year, snap.month)} at ${timeText(snap.savedAt)}.`);
+      return true;
+    } catch (e) {
+      showRosterMessage("Save to IndexedDB failed: " + (e.message || e), "error", "Save to IndexedDB");
+      return false;
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    }
+  }
+
+  // ---------- Restore ----------
+  function applyWorkingSnapshot(snap, withSettings) {
+    stopAutoSave();
+    const d = snap.draft || {}, g = snap.global || null;
+    const y = Number(d.year || snap.year), m = Number(d.month || snap.month);
+    const cur = getMonthInfo(), switching = !!(y && m && (y !== cur.year || m !== cur.month));
+    if (y && m) { document.getElementById("yearInput").value = y; document.getElementById("monthSelect").value = m; }
+
+    if (withSettings && g) {
+      if (g.rosterSettings) rosterSettings = { ...rosterSettings, ...safeClone(g.rosterSettings) };
+      if (Array.isArray(g.localStaff)) { localStaff = safeClone(g.localStaff); for (const x of localStaff) if (!portalStaff.some(p => p.id === x.id)) portalStaff.push(x); }
+      if (g.officerRules) officerRules = safeClone(g.officerRules);
+      if (g.autoConfig) autoConfig = { weeklyOff: {}, annualLeave: [], groups: { A: [], B: [], special: [] }, fixedPatterns: [], shiftPreferences: {}, ...safeClone(g.autoConfig) };
+    }
+    const timings = Array.isArray(d.customTimings) && d.customTimings.length ? d.customTimings : (withSettings && g && Array.isArray(g.customTimings) ? g.customTimings : null);
+    if (timings) { customTimings = safeClone(timings); refreshDutyDefinitions(); }
+
+    rosterData = safeClone(d.rosterData || {});
+    temporaryRosterOrder = Array.isArray(d.temporaryRosterOrder) ? safeClone(d.temporaryRosterOrder) : [];
+    for (const [set, list] of [[generatedCells, snap.cells?.generated], [requestedCells, snap.cells?.requested], [patternCells, snap.cells?.pattern]]) { set.clear(); (list || []).forEach(x => set.add(x)); }
+
+    if (d.rosterStartDate && d.rosterEndDate) {
+      document.getElementById("rosterStartDate").value = d.rosterStartDate;
+      document.getElementById("rosterEndDate").value = d.rosterEndDate;
+      rosterRangeStartDay = Number(d.rosterStartDate.slice(-2)) || 1;
+      rosterRangeEndDay = Number(d.rosterEndDate.slice(-2)) || getMonthInfo().lastDay;
+    } else if (switching) initRosterDateRange();
+
+    manualDutyDraft = safeClone(snap.manual || {}); saveManualDutyDraft();
+    if (Array.isArray(snap.carriedOff)) { carriedOffCache = { key: carriedOffKey(), set: new Set(snap.carriedOff) }; saveCarriedOff(); }
+
+    updateAutoCreateRange();
+    saveRosterLocal(false);            // the restored state becomes the working copy (local + IndexedDB)
+    if (withSettings) saveGlobalLocal();
+    renderAutoSetup(); renderRoster();
+    if (switching) ensurePreviousRosterHistory().catch(console.warn);
+    markSaved("local", Date.now());
+    showToast(`Restored ${monthName(y, m)} from IndexedDB${withSettings && g ? " with settings" : ""}. Press Undo if you need the previous version back.`);
+  }
+
+  // ---------- Load from IndexedDB dialog ----------
+  let overlay = null, items = [];
+  function ensureDialog() {
+    if (overlay) return;
+    overlay = document.createElement("div");
+    overlay.id = "idbOverlay";
+    overlay.innerHTML = `<div id="idbBox" role="dialog" aria-modal="true" aria-labelledby="idbTitle">
+      <div class="idb-head"><div><h3 id="idbTitle">Load from IndexedDB</h3><small>Rosters saved in this browser. Firebase is not changed.</small></div><button class="idb-close" type="button" data-act="close" aria-label="Close">×</button></div>
+      <div class="idb-body" id="idbList"></div>
+      <div class="idb-foot"><label><input type="checkbox" id="idbWithSettings" checked> Also restore settings (staff, leave, groups, patterns, timings)</label><span id="idbUsage" style="margin-left:auto"></span></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", e => {
+      e.stopPropagation();                               // keep the page's auto-save from firing mid-restore
+      if (e.target === overlay) return closeDialog();
+      const b = e.target.closest("[data-act]"); if (!b) return;
+      const act = b.dataset.act, item = items[Number(b.dataset.i)];
+      if (act === "close") closeDialog();
+      else if (act === "restore" && item) restoreItem(item);
+      else if (act === "delete" && item) deleteItem(item, b);
+    });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && overlay.classList.contains("open")) closeDialog(); });
+  }
+  function closeDialog() { overlay?.classList.remove("open"); }
+
+  async function openIdbDialog() {
+    ensureDialog(); overlay.classList.add("open");
+    const list = document.getElementById("idbList");
+    list.innerHTML = `<div class="idb-empty">Reading IndexedDB…</div>`;
+    try {
+      if (!window.indexedDB) throw new Error("IndexedDB is not available in this browser.");
+      await flushRosterIdb();
+      items = [];
+      for (const k of await rosterIdbKeys()) {
+        if (typeof k !== "string") continue;
+        if (k.startsWith(SNAP_PREFIX)) {
+          const v = await rosterIdbGet(k);
+          if (v && v.draft) items.push({ key: k, kind: "snap", snap: v, y: Number(v.year), m: Number(v.month), ts: v.savedAt });
+        } else if (k.startsWith(DRAFT_PREFIX)) {
+          const v = await rosterIdbGet(k);
+          if (v && v.rosterData) { const [ky, km] = k.slice(DRAFT_PREFIX.length).split("-").map(Number); items.push({ key: k, kind: "auto", draft: v, y: Number(v.year) || ky, m: Number(v.month) || km, ts: v.savedAt }); }
+        }
+      }
+      const cur = getMonthInfo(), curKey = monthKeyOf(cur.year, cur.month);
+      items.sort((a, b) => {
+        const ak = monthKeyOf(a.y, a.m), bk = monthKeyOf(b.y, b.m);
+        if ((ak === curKey) !== (bk === curKey)) return ak === curKey ? -1 : 1;
+        if (ak !== bk) return bk.localeCompare(ak);
+        if (a.kind !== b.kind) return a.kind === "auto" ? -1 : 1;
+        return (b.ts || 0) - (a.ts || 0);
+      });
+      if (!items.length) { list.innerHTML = `<div class="idb-empty">Nothing is saved in IndexedDB yet. Press <b>Save to IndexedDB</b> to make a checkpoint.</div>`; }
+      else {
+        let html = "", lastMonth = "";
+        items.forEach((it, i) => {
+          const mk = monthKeyOf(it.y, it.m);
+          if (mk !== lastMonth) { html += `<div class="idb-month">${esc(monthName(it.y, it.m))}${mk === curKey ? " · open now" : ""}</div>`; lastMonth = mk; }
+          const d = it.kind === "snap" ? it.snap.draft : it.draft;
+          const staff = Object.keys(d.rosterData || {}).length, cells = countCells(d.rosterData);
+          const title = it.kind === "snap" ? `Checkpoint · ${timeText(it.ts)}` : `Working copy · ${timeText(it.ts)}`;
+          const note = [rangeText(d), `${staff} staff`, `${cells} duties`, it.kind === "auto" ? "updated automatically as you work" : ""].filter(Boolean).join(" · ");
+          html += `<div class="idb-item"><div class="meta"><b><span class="idb-kind ${it.kind === "auto" ? "auto" : ""}">${it.kind === "auto" ? "AUTO" : "SAVED"}</span>${esc(title)}</b><small>${esc(note)}</small></div>
+            <button class="btn primary" type="button" data-act="restore" data-i="${i}">Restore</button>${it.kind === "snap" ? `<button class="btn" type="button" data-act="delete" data-i="${i}" title="Delete this checkpoint">Delete</button>` : ""}</div>`;
+        });
+        list.innerHTML = html;
+      }
+      const usage = document.getElementById("idbUsage");
+      try { const est = await navigator.storage?.estimate?.(); usage.textContent = est && est.usage != null ? `Browser storage used: ${sizeText(est.usage)}` : ""; } catch (_) { usage.textContent = ""; }
+    } catch (e) {
+      list.innerHTML = `<div class="idb-empty">Could not read IndexedDB: ${esc(e.message || e)}</div>`;
+    }
+  }
+
+  async function restoreItem(it) {
+    const withSettings = document.getElementById("idbWithSettings")?.checked;
+    let snap = it.kind === "snap" ? it.snap : { draft: it.draft, global: await rosterIdbGet(LOCAL_GLOBAL_KEY).catch(() => null) };
+    const cur = getMonthInfo(), other = monthKeyOf(it.y, it.m) !== monthKeyOf(cur.year, cur.month);
+    if (!confirm(`Restore the ${monthName(it.y, it.m)} roster saved ${timeText(it.ts)}?\n\n${other ? "The editor will switch to that month. " : ""}The duties for that month will be replaced on screen${withSettings ? ", together with staff, leave, groups and patterns" : ""}.\nYou can press Undo straight after. Firebase is not changed until you Upload.`)) return;
+    closeDialog();
+    try { applyWorkingSnapshot(snap, withSettings); }
+    catch (e) { console.error(e); showRosterMessage("Restore failed: " + (e.message || e), "error", "Load from IndexedDB"); }
+  }
+
+  async function deleteItem(it, btn) {
+    if (!confirm(`Delete the checkpoint saved ${timeText(it.ts)}? This cannot be undone.`)) return;
+    btn.disabled = true;
+    try { await rosterIdbDelete(it.key); await openIdbDialog(); }
+    catch (e) { btn.disabled = false; showRosterMessage("Delete failed: " + (e.message || e), "error", "Load from IndexedDB"); }
+  }
+
+  // ---------- toolbar ----------
+  function mountToolbar() {
+    if (document.getElementById("storageRow")) return;
+    const steps = document.querySelector(".roster-manager .rt-steps"); if (!steps) return;
+    const row = document.createElement("div");
+    row.className = "rt-row rt-storage no-print"; row.id = "storageRow";
+    row.innerHTML = `<span class="rt-label">Storage</span>
+      <button class="btn" type="button" id="saveLocalBtn" title="Save the roster and settings to this browser's local storage (Ctrl+S saves to both)">💾 Save to Local</button>
+      <button class="btn" type="button" id="saveIdbBtn" title="Save a dated checkpoint to IndexedDB that you can come back to">🗄 Save to IndexedDB</button>
+      <button class="btn" type="button" id="loadIdbBtn" title="Choose a saved roster in IndexedDB and restore it">⇪ Load from IndexedDB</button>
+      <span class="rt-spacer"></span><span id="storeState" class="store-state"></span>`;
+    steps.after(row);
+    const bind = (id, fn) => document.getElementById(id).addEventListener("click", e => { e.stopPropagation(); fn(e.currentTarget); });
+    bind("saveLocalBtn", () => saveToLocal());
+    bind("saveIdbBtn", btn => saveToIdb(btn));
+    bind("loadIdbBtn", () => openIdbDialog());
+    renderMarks();
+  }
+
+  document.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && String(e.key).toLowerCase() === "s") {
+      e.preventDefault();
+      if (saveToLocal()) saveToIdb(document.getElementById("saveIdbBtn"));
+    }
+  });
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountToolbar); else mountToolbar();
+  window.koveliStorage = { saveToLocal, saveToIdb, openIdbDialog };
+})();
+</script>
+
 </body>
 </html>
