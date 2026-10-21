@@ -1695,22 +1695,43 @@ function showToast(msg){let t=document.getElementById("koveliToast");if(!t){t=do
 function initSelectors(){const m=document.getElementById("monthSelect");const names=["January","February","March","April","May","June","July","August","September","October","November","December"];m.innerHTML=names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join("");const now=new Date();m.value=now.getMonth()+1;document.getElementById("yearInput").value=now.getFullYear();currentPart=now.getDate()<=15?1:2;updatePartButtons();}
 function normalizePortalStaff(doc){const d=doc.data()||{};return{id:doc.id,name:String(d.name||d.fullName||d.staffName||d.employeeName||d.displayName||d.username||"Unnamed Staff").trim(),rcNo:String(d.rcNo||d.rcno||d.rcNumber||d.rc||d.staffNo||d.employeeNo||d.employeeId||d.staffId||doc.id).trim(),portalRole:String(d.role||d.userRole||d.level||d.userLevel||"Staff").trim()}}
 async function loadStaffSetup(){try{setStatus("staffStatus","Loading staff...","info");const [staffSnap,settingsSnap]=await Promise.all([db.collection("staff").get(),db.collection("rosterStaff").get()]);portalStaff=staffSnap.docs.map(normalizePortalStaff);rosterSettings={};settingsSnap.forEach(doc=>rosterSettings[doc.id]={id:doc.id,...doc.data()});renderStaffSetup();renderAutoSetup();renderRoster();setStatus("staffStatus",`Loaded ${portalStaff.length} staff.`,"success")}catch(e){console.error(e);setStatus("staffStatus","Unable to load staff: "+e.message,"error")}}
-function mergedStaff(){return portalStaff.map((p,i)=>{const r=rosterSettings[p.id]||{};return{...p,rosterRole:r.rosterRole||"Officers",included:r.included!==false,sortOrder:Number(r.sortOrder||r.rosterNo||i+1),rosterNo:Number(r.rosterNo||r.sortOrder||i+1)}})}
+function mergedStaff(){let changed=false;const out=portalStaff.map((p,i)=>{if(syncPortalRole(p))changed=true;const r=rosterSettings[p.id]||{};return{...p,rosterRole:r.rosterRole||portalRoleToRosterRole(p.portalRole),included:r.included!==false,sortOrder:Number(r.sortOrder||r.rosterNo||i+1),rosterNo:Number(r.rosterNo||r.sortOrder||i+1)}});if(changed)scheduleRoleSyncSave();return out}
 function portalRoleToRosterRole(role){
   const x=String(role||"").trim().toLowerCase().replace(/[._-]+/g," ").replace(/\s+/g," ");
   if(x.includes("admin"))return "Admin";
-  if(x.includes("senior executive")||x.includes("snr executive")||x.includes("snr. executive"))return "Snr. Executive";
-  if(x==="executive"||x.includes(" executive"))return "Executive";
-  if(x.includes("supervisor"))return "Supervisor";
-  if(x==="hk"||x.includes("housekeep"))return "HK";
+  if(/\b(senior|snr|sr) exec/.test(x))return "Snr. Executive";
+  if(/\bexec/.test(x))return "Executive";
+  if(x.includes("supervisor")||x==="sup")return "Supervisor";
+  if(x==="hk"||x==="h k"||/house ?keep/.test(x))return "HK";
   return "Officers";
 }
+// The role set on the Admin page decides the roster section. Each roster setting remembers
+// the Admin role it was last matched to (portalRoleSeen). When Admin changes the role, the
+// roster role follows it; a drag in the roster editor stays until Admin changes the role again.
+// Older settings saved before this existed are corrected when Admin's role clearly names a
+// section (HK, Supervisor, Executive, Snr. Executive, Admin) that differs from the saved one.
+function syncPortalRole(p){
+  const r=rosterSettings[p.id];if(!r)return false;
+  const now=String(p.portalRole||"").trim(),mapped=portalRoleToRosterRole(now);
+  let changed=false;
+  if(r.portalRoleSeen===undefined||r.portalRoleSeen===null){
+    r.portalRoleSeen=now;changed=true;
+    if(mapped!=="Officers"&&r.rosterRole!==mapped){const no=nextRosterNumber(mapped);r.rosterRole=mapped;r.rosterNo=r.sortOrder=no}
+  }else if(String(r.portalRoleSeen)!==now){
+    r.portalRoleSeen=now;changed=true;
+    if(r.rosterRole!==mapped){const no=nextRosterNumber(mapped);r.rosterRole=mapped;r.rosterNo=r.sortOrder=no}
+  }
+  if(changed)r.portalRole=now;
+  return changed;
+}
+let roleSyncTimer=null;
+function scheduleRoleSyncSave(){clearTimeout(roleSyncTimer);roleSyncTimer=setTimeout(()=>{try{saveGlobalLocal()}catch(e){console.warn("Role sync save failed",e)}},300)}
 function ensureStaffSetting(id,includeDefault=true){
   const p=portalStaff.find(x=>x.id===id);if(!p)return null;
   const old=rosterSettings[id]||{};
   const hasSaved=Object.keys(old).length>0;
   const no=Number(old.rosterNo||old.sortOrder)||nextRosterNumber(old.rosterRole||portalRoleToRosterRole(p.portalRole));
-  return rosterSettings[id]={...old,staffId:id,name:p.name,rcNo:p.rcNo,portalRole:p.portalRole,rosterRole:old.rosterRole||portalRoleToRosterRole(p.portalRole),included:hasSaved?old.included!==false:includeDefault,sortOrder:no,rosterNo:no};
+  return rosterSettings[id]={...old,staffId:id,name:p.name,rcNo:p.rcNo,portalRole:p.portalRole,rosterRole:old.rosterRole||portalRoleToRosterRole(p.portalRole),portalRoleSeen:hasSaved?old.portalRoleSeen:String(p.portalRole||"").trim(),included:hasSaved?old.included!==false:includeDefault,sortOrder:no,rosterNo:no};
 }
 function nextRosterNumber(role){
   const used=Object.values(rosterSettings).filter(r=>(r.rosterRole||"")===role&&r.included!==false).map(r=>Number(r.rosterNo||r.sortOrder)||0).filter(Boolean);
@@ -3540,7 +3561,7 @@ async function uploadEverythingToFirebase(){
     saveRosterLocal(false);await flushRosterIdb();setStatus("rosterStatus","Uploading to Firebase...","info");
     initializeUnsavedStaff();
     const staffBatch=db.batch();
-    for(const p of portalStaff){const r=rosterSettings[p.id]||ensureStaffSetting(p.id,true);const no=Math.max(1,Number(r.rosterNo||r.sortOrder)||nextRosterNumber(r.rosterRole));const data={staffId:p.id,name:p.name,rcNo:p.rcNo,portalRole:p.portalRole,rosterRole:r.rosterRole||portalRoleToRosterRole(p.portalRole),included:r.included!==false,sortOrder:no,rosterNo:no,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};staffBatch.set(db.collection("rosterStaff").doc(p.id),data,{merge:true});rosterSettings[p.id]={...r,...data}}
+    for(const p of portalStaff){const r=rosterSettings[p.id]||ensureStaffSetting(p.id,true);const no=Math.max(1,Number(r.rosterNo||r.sortOrder)||nextRosterNumber(r.rosterRole));const data={staffId:p.id,name:p.name,rcNo:p.rcNo,portalRole:p.portalRole,rosterRole:r.rosterRole||portalRoleToRosterRole(p.portalRole),portalRoleSeen:r.portalRoleSeen??String(p.portalRole||"").trim(),included:r.included!==false,sortOrder:no,rosterNo:no,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};staffBatch.set(db.collection("rosterStaff").doc(p.id),data,{merge:true});rosterSettings[p.id]={...r,...data}}
     await staffBatch.commit();
     const ruleBatch=db.batch();
     getVisibleRosterStaff().forEach(st=>ruleBatch.set(db.collection("rosterOfficerRules").doc(st.id),{...getRule(st.id),staffId:st.id,name:st.name,rcNo:st.rcNo,rosterRole:st.rosterRole,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}));
