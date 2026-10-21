@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Roster editor | Koveli staff portal</title>
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<meta name="theme-color" content="#0E2A33">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/app.css?v=3">
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
@@ -20,7 +23,7 @@ body{padding:10px}.page{max-width:1900px;margin:auto}.topbar{display:flex;align-
 .group-board-box{background:#f7fbfb}.group-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:7px;margin-bottom:8px}.group-toolbar .field{min-width:220px}.group-counts{display:flex;gap:5px;flex-wrap:wrap;align-items:center;flex:1}.group-count{padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900;border:1px solid #ccdada;background:#fff}.group-help{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:9px;color:#60777a;margin:5px 0 8px}.group-key{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;font-weight:900;border:1px solid #ccdada}.key-a{background:#dff4ff;color:#14587a}.key-b{background:#fff0d8;color:#7a4b00}.key-s{background:#efe5ff;color:#5b2a91}.key-none{background:#f0f2f2;color:#647477}.group-board{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:6px;max-height:390px;overflow:auto;padding:2px}.group-person{display:grid;grid-template-columns:minmax(120px,1fr) repeat(4,52px);align-items:center;gap:4px;padding:5px;border:1px solid #d6e3e4;border-radius:8px;background:#fff}.group-person-info{min-width:0}.group-person-name{font-size:10px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.group-person-rc{font-size:8px;color:#6a8083;margin-top:1px}.group-choice{height:30px;border:1px solid #cbd9da;border-radius:6px;background:#f7f9f9;font-size:9px;font-weight:900;cursor:pointer;color:#425d60}.group-choice:hover{outline:2px solid #90c9cd;outline-offset:-2px}.group-choice.active-a{background:#bdeaff;border-color:#48a8d0;color:#0a4967}.group-choice.active-b{background:#ffe0ae;border-color:#e0a33c;color:#704100}.group-choice.active-special{background:#dcc4ff;border-color:#9a6bd2;color:#4b1e79}.group-choice.active-none{background:#dfe5e5;border-color:#aab9ba;color:#46595b}@media(max-width:700px){.group-board{grid-template-columns:1fr;max-height:430px}.group-person{grid-template-columns:minmax(105px,1fr) repeat(4,43px);gap:3px}.group-choice{height:32px;font-size:8px}.group-toolbar .field{min-width:160px;flex:1}}
 .staff-add-bar{display:flex;flex-wrap:wrap;gap:7px;align-items:end;padding:9px;border:1px solid var(--line);border-radius:9px;background:#f8fbfb;margin-bottom:9px}.staff-add-bar .grow{min-width:260px;flex:1}.role-board{display:grid;grid-template-columns:repeat(3,minmax(250px,1fr));gap:8px}.role-zone{border:1px solid #cddddd;border-radius:10px;background:#f7fbfb;min-height:120px;overflow:hidden}.role-zone.drag-over{outline:3px solid #69bfc5;outline-offset:-3px;background:#eefafa}.role-zone-head{display:flex;align-items:center;justify-content:space-between;padding:7px 9px;background:#e8f3f3;border-bottom:1px solid #d5e3e4;font-size:11px;font-weight:900}.role-zone-head .count{font-size:8px;background:#fff;border:1px solid #c9dada;border-radius:999px;padding:2px 6px}.role-zone-list{padding:6px;display:flex;flex-direction:column;gap:5px;min-height:78px}.staff-card{display:grid;grid-template-columns:26px minmax(100px,1fr) 62px 26px;gap:5px;align-items:center;border:1px solid #d4e1e2;border-radius:7px;background:#fff;padding:5px;cursor:grab;box-shadow:0 1px 4px #173f4410}.staff-card:active{cursor:grabbing}.staff-card .drag-handle{font-size:15px;text-align:center;color:#7b9294}.staff-card .who{min-width:0}.staff-card .who b{display:block;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.staff-card .who small{display:block;font-size:8px;color:#6a8083;margin-top:1px}.staff-card .no-input{height:28px;width:62px;border:1px solid #cbdadb;border-radius:5px;text-align:center;font-weight:900;font-size:10px}.staff-card .remove-staff{width:26px;height:26px;border:0;border-radius:5px;background:#ffe9e7;color:#9b1c14;font-weight:900;font-size:15px;cursor:pointer}.empty-role{padding:18px 8px;text-align:center;color:#839799;font-size:9px;border:1px dashed #cddddd;border-radius:6px}.admin-zone{opacity:.8}@media(max-width:1100px){.role-board{grid-template-columns:repeat(2,minmax(240px,1fr))}}@media(max-width:650px){.role-board{grid-template-columns:1fr}.staff-card{grid-template-columns:24px minmax(90px,1fr) 58px 28px}}
 .part-tabs{display:flex;gap:5px}.part-btn{border:1px solid #b8ced0;background:#fff;color:#245257;border-radius:6px;padding:6px 10px;font-weight:800;cursor:pointer}.part-btn.active{background:var(--teal);color:#fff;border-color:var(--teal)}
-.roster-wrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px;overscroll-behavior:contain}.roster-table{table-layout:fixed}.roster-table th,.roster-table td{border-right:1px solid #d7e1e2;border-bottom:1px solid #d7e1e2;padding:0}.staff-head{position:sticky;left:0;top:0;z-index:20;width:130px;min-width:130px;background:#076d76;color:#fff;padding:5px!important;text-align:left}.date-head{position:sticky;top:0;z-index:12;width:46px;min-width:46px;height:34px;background:#087983;color:#fff;font-size:8px;text-align:center}.date-head.weekend{background:#8b5e00}.date-head.today{box-shadow:inset 0 0 0 2px #ffe66d}.role-row td{background:#dcebec!important;color:#17464b;font-weight:900;padding:3px 6px!important;text-align:left;font-size:9px}.staff-cell{position:sticky;left:0;z-index:7;width:130px;min-width:130px;max-width:130px;background:#fff;padding:2px 5px!important;height:24px}.staff-line{display:flex;gap:4px;align-items:center;min-width:0}.roster-no{font-size:8px;background:#e3eeee;border-radius:4px;padding:2px 3px;font-weight:900;flex:none}.staff-name{font-size:9px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.staff-rc{font-size:7px;color:#668083;margin-top:1px}.duty-cell{width:46px;min-width:46px;height:24px;text-align:center;font-size:8px;font-weight:900;cursor:pointer;background:#fafcfc}.duty-cell:hover{outline:2px solid #08a0aa;outline-offset:-2px}.d0730{background:linear-gradient(180deg,#fff7a6 0%,#f7c928 100%)!important;color:#493c00}.d0800{background:linear-gradient(180deg,#b6e7ad 0%,#48aa57 100%)!important;color:#123d1c}.d0830{background:linear-gradient(180deg,#8ce4e8 0%,#06a5aa 100%)!important;color:#063c40}.d1530{background:linear-gradient(180deg,#72bdf5 0%,#1767c7 100%)!important;color:#fff}.d1630{background:linear-gradient(180deg,#d49add 0%,#7d27a3 100%)!important;color:#fff}.d1730{background:linear-gradient(180deg,#ffd08a 0%,#ef7410 100%)!important;color:#4a2700}.d0030{background:linear-gradient(180deg,#f27b78 0%,#b51920 100%)!important;color:#fff}.dOFF{background:linear-gradient(180deg,#f0f0f0 0%,#b9b9b9 100%)!important;color:#505050}.dALEAVE{background:linear-gradient(180deg,#f8bbd0 0%,#d94f82 100%)!important;color:#57132d}.generated{box-shadow:inset 0 -2px 0 rgba(0,0,0,.2)}
+.roster-wrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px;overscroll-behavior:contain}.roster-table{table-layout:fixed}.roster-table th,.roster-table td{border-right:1px solid #d7e1e2;border-bottom:1px solid #d7e1e2;padding:0}.staff-head{position:sticky;left:0;top:0;z-index:20;width:130px;min-width:130px;background:#076d76;color:#fff;padding:5px!important;text-align:left}.date-head{position:sticky;top:0;z-index:12;width:46px;min-width:46px;height:34px;background:#087983;color:#fff;font-size:8px;text-align:center}.date-head.weekend{background:#8b5e00}.date-head.today{box-shadow:inset 0 0 0 2px #ffe66d}.role-row td{background:#dcebec!important;color:#17464b;font-weight:900;padding:3px 6px!important;text-align:left;font-size:9px}.staff-cell{position:sticky;left:0;z-index:7;width:130px;min-width:130px;max-width:130px;background:#fff;padding:2px 5px!important;height:24px}.staff-line{display:flex;gap:4px;align-items:center;min-width:0}.roster-no{font-size:8px;background:#e3eeee;border-radius:4px;padding:2px 3px;font-weight:900;flex:none}.staff-name{font-size:9px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.staff-rc{font-size:7px;color:#668083;margin-top:1px}.duty-cell{width:46px;min-width:46px;height:24px;text-align:center;font-size:8px;font-weight:900;cursor:pointer;background:#fafcfc}.duty-cell:hover{outline:2px solid #08a0aa;outline-offset:-2px}.d0730{background:linear-gradient(180deg,#fff7a6 0%,#f7c928 100%)!important;color:#493c00}.d0800{background:linear-gradient(180deg,#b6e7ad 0%,#48aa57 100%)!important;color:#123d1c}.d0830{background:linear-gradient(180deg,#8ce4e8 0%,#06a5aa 100%)!important;color:#063c40}.d1530{background:linear-gradient(180deg,#72bdf5 0%,#1767c7 100%)!important;color:#fff}.d1630{background:linear-gradient(180deg,#d49add 0%,#7d27a3 100%)!important;color:#fff}.d1730{background:linear-gradient(180deg,#ffd08a 0%,#ef7410 100%)!important;color:#4a2700}.d0030{background:linear-gradient(180deg,#f27b78 0%,#b51920 100%)!important;color:#fff}.dOFF{background:linear-gradient(180deg,#f0f0f0 0%,#b9b9b9 100%)!important;color:#505050}.dALEAVE{background:linear-gradient(180deg,#f8bbd0 0%,#d94f82 100%)!important;color:#57132d}.dLEAVE{background:linear-gradient(180deg,#e6ccb2 0%,#9c6644 100%)!important;color:#fff}.generated{box-shadow:inset 0 -2px 0 rgba(0,0,0,.2)}
 .popup{position:fixed;display:none;z-index:1000;background:#fff;border:1px solid #b9ced0;border-radius:10px;padding:7px;box-shadow:0 10px 35px #0003;grid-template-columns:repeat(3,72px);gap:5px}.popup.open{display:grid}.popup button{border:0;border-radius:6px;height:31px;font-size:10px;font-weight:900;cursor:pointer}.popup .clear{grid-column:1/-1;background:#fff0ef;color:#9b1c14;border:1px solid #f1b9b5}
 .summary-table .role-label{background:linear-gradient(135deg,#d8f3ef,#b8e4df);font-weight:900;text-align:left;color:#064e4a}.summary-table .total{background:#dff5ea;font-weight:900;color:#075f3d}.summary-table .group{font-weight:900}.summary-table .sum-morning{background:#fff3bf;color:#6b5200}.summary-table .sum-afternoon{background:#dcecff;color:#164f8f}.summary-table .sum-duty{background:#f7fbfb}.summary-table .sum-duty:nth-child(even){background:#eef7f6}.rc-copy{cursor:pointer;user-select:none;transition:.15s;background:#fbfefe}.rc-copy:hover{background:#d9f3ef;box-shadow:inset 0 0 0 1px #62bdb4}.rc-copy.copied{background:#ffd166!important;color:#5b4300!important;font-weight:900;box-shadow:inset 0 0 0 2px #e3a800}.rc-copy.copied:after{content:" ✓"}.issues{margin-top:8px;font-size:10px}.issue{padding:6px 8px;border-radius:6px;background:#fff2e5;color:#7b3f00;margin:4px 0}.okbox{padding:6px 8px;border-radius:6px;background:#e8f7f0;color:#07613f}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px;margin-top:8px}.stat-card{border:1px solid var(--line);border-radius:8px;padding:7px;background:#fafcfc;font-size:10px}.stat-card b{font-size:11px}.muted{color:#6a8083}
 @media(max-width:700px){body{padding:5px}.topbar{border-radius:8px}.topbar h1{font-size:14px}.card{border-radius:8px}.card-body{padding:6px}.staff-head,.staff-cell{width:112px;min-width:112px;max-width:112px}.staff-name{font-size:8px}.date-head,.duty-cell{width:46px;min-width:46px}.roster-wrap{max-height:72vh}.controls{gap:5px}.btn{padding:0 8px;font-size:10px}}
@@ -1450,7 +1453,7 @@ table[id*="roster"] thead th:first-child{
         </div>
         <div class="setup-stack">
           <div class="setup-column"><h3>Annual Leave</h3><div class="controls"><div class="field"><label>From</label><input id="annualLeaveFrom" type="date"></div><div class="field"><label>To</label><input id="annualLeaveTo" type="date"></div><div class="field grow"><label>Staff</label><div class="staff-search" id="annualLeaveOfficerBox"><input id="annualLeaveOfficer" type="text" autocomplete="off" placeholder="Type staff name..." oninput="filterStaffSearch('annualLeaveOfficer')" onfocus="filterStaffSearch('annualLeaveOfficer')"><input id="annualLeaveOfficerId" type="hidden"><div id="annualLeaveOfficerMenu" class="staff-search-menu"></div></div></div><button class="btn primary" type="button" id="annualLeaveAddBtn" onclick="addAnnualLeavePeriod()">Add Leave</button><button class="btn" type="button" id="annualLeaveCancelBtn" style="display:none" onclick="cancelAnnualLeaveEdit()">Cancel</button><button class="btn dark" type="button" title="Bring in the annual leave Admin approved in the staff portal" onclick="importPortalLeave(false)">⇩ Get approved leave from portal</button></div><div id="annualLeaveList" class="request-list saved-list"></div></div>
-          <div class="setup-column"><h3>Special Duty Request</h3><div class="controls"><div class="field"><label>Date</label><input id="requestDate" type="date"></div><div class="field grow"><label>Staff</label><div class="staff-search" id="requestOfficerBox"><input id="requestOfficer" type="text" autocomplete="off" placeholder="Type staff name..." oninput="filterStaffSearch('requestOfficer')" onfocus="filterStaffSearch('requestOfficer')"><input id="requestOfficerId" type="hidden"><div id="requestOfficerMenu" class="staff-search-menu"></div></div></div><div class="field"><label>Duty</label><select id="requestDuty"><option value="0730">0730</option><option value="0830">0830</option><option value="1530">1530</option><option value="1630">1630</option><option value="0030">0030</option><option value="A-Leave">A-Leave</option></select></div><button class="btn primary" onclick="addRequestedDuty()">Add Request</button></div><div id="requestList" class="request-list saved-list"></div></div>
+          <div class="setup-column"><h3>Special Duty Request</h3><div class="controls"><div class="field"><label>Date</label><input id="requestDate" type="date"></div><div class="field grow"><label>Staff</label><div class="staff-search" id="requestOfficerBox"><input id="requestOfficer" type="text" autocomplete="off" placeholder="Type staff name..." oninput="filterStaffSearch('requestOfficer')" onfocus="filterStaffSearch('requestOfficer')"><input id="requestOfficerId" type="hidden"><div id="requestOfficerMenu" class="staff-search-menu"></div></div></div><div class="field"><label>Duty</label><select id="requestDuty"><option value="0730">0730</option><option value="0830">0830</option><option value="1530">1530</option><option value="1630">1630</option><option value="0030">0030</option><option value="A-Leave">A-Leave</option><option value="Leave">Leave</option></select></div><button class="btn primary" onclick="addRequestedDuty()">Add Request</button></div><div id="requestList" class="request-list saved-list"></div></div>
         </div>
         <div class="setup-stack">
           <div class="setup-column"><h3>Add / Remove Staff</h3><div class="controls" style="align-items:end"><div class="field grow"><label>Existing Staff (optional)</label><div class="staff-search" id="entryAddStaffBox"><input id="entryAddStaff" type="text" autocomplete="off" placeholder="Type name / RC..." oninput="filterStaffSearch('entryAddStaff')" onfocus="filterStaffSearch('entryAddStaff')"><input id="entryAddStaffId" type="hidden"><div id="entryAddStaffMenu" class="staff-search-menu"></div></div></div></div><div class="controls"><div class="field grow"><label>Staff Name</label><input id="newStaffName" type="text" placeholder="Staff name"></div><div class="field"><label>RC No.</label><input id="newStaffRc" type="text" placeholder="RC No."></div></div><div class="controls"><div class="field"><label>Roster No.</label><input id="newStaffRosterNo" type="number" min="1" placeholder="No."></div><div class="field grow"><label>Roster Role</label><select id="newStaffRole"><option>Snr. Executive</option><option>Executive</option><option>Supervisor</option><option selected>Officers</option><option>HK</option><option>Admin</option></select></div><button class="btn primary" onclick="addStaffFromEntry()">Add Staff</button></div><div class="daily-summary">Choose an existing/removed staff member or enter a completely new staff member. Name, RC No. and Roster No. are stored offline. Use × in Roster Entry to delete/remove staff.</div></div>
@@ -1528,12 +1531,14 @@ const db=firebase.firestore();
 const ROSTER_ROLES=["Admin","Snr. Executive","Executive","Supervisor","Officers","HK"];
 const DISPLAY_ROLES=["Snr. Executive","Executive","Supervisor","Officers","HK"];
 const ROLE_ORDER={"Admin":0,"Snr. Executive":1,"Executive":2,"Supervisor":3,"Officers":4,"HK":5};
-const BASE_DUTIES=["0730","0800","0830","1530","1630","1730","0030","OFF","A-Leave"]; let DUTIES=[...BASE_DUTIES]; let customTimings=[];
+const BASE_DUTIES=["0730","0800","0830","1530","1630","1730","0030","OFF","A-Leave","Leave"]; let DUTIES=[...BASE_DUTIES]; let customTimings=[];
 const OFFICER_WORK_DUTIES=["0730","0830","1530","1630","0030"];
 const MORNING_DUTIES=["0730","0830"];
 const AFTERNOON_DUTIES=["1530","1630","1730"];
 const SHIFT_SUMMARY_ROLES=["Supervisor","Officers","HK"];
-const DUTY_CLASSES={"0730":"d0730","0800":"d0800","0830":"d0830","1530":"d1530","1630":"d1630","1730":"d1730","0030":"d0030","OFF":"dOFF","A-Leave":"dALEAVE"};
+const DUTY_CLASSES={"0730":"d0730","0800":"d0800","0830":"d0830","1530":"d1530","1630":"d1630","1730":"d1730","0030":"d0030","OFF":"dOFF","A-Leave":"dALEAVE","Leave":"dLEAVE"};
+const NON_WORK_DUTIES=["OFF","A-Leave","Leave"];
+function isNonWorkDuty(v){return NON_WORK_DUTIES.includes(v)}
 const DAY_NAMES=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 let portalStaff=[],rosterSettings={},rosterData={},generatedCells=new Set(),requestedCells=new Set(),officerRules={},autoConfig={weeklyOff:{},annualLeave:[],groups:{A:[],B:[],special:[]},fixedPatterns:[],shiftPreferences:{}},currentPart=1,selectedCell=null,lastWeeklyOffDay="Sunday",rosterRangeStartDay=1,rosterRangeEndDay=31;
 let localStaff=[];
@@ -1971,7 +1976,7 @@ function renderShiftPreferenceList(){
 }
 function populatePatternDutySelects(){
   const box=document.getElementById("fixedPatternDays");if(!box)return;
-  const choices=[...new Set([...DUTIES.filter(x=>x!=="A-Leave"),"OFF"])];
+  const choices=[...new Set([...DUTIES.filter(x=>x!=="A-Leave"&&x!=="Leave"),"OFF"])];
   const current={};
   DAY_NAMES.forEach(day=>{const el=document.getElementById("patternDay"+day);if(el)current[day]=el.value});
   box.innerHTML=DAY_NAMES.map(day=>`<div class="field"><label>${esc(day)}</label><select id="patternDay${day}">${choices.map(x=>`<option value="${esc(x)}">${esc(x)}${timingDescription(x)?" · "+esc(timingDescription(x)):""}</option>`).join("")}</select></div>`).join("");
@@ -2064,7 +2069,7 @@ function applyFixedWeeklyPatterns(startDay,endDay){
         rosterData[p.staffId][day]="OFF";patternCells.add(key);generatedCells.delete(key);continue;
       }
       if(patternStaff?.rosterRole==="Officers"&&(duty==="0800"||duty==="1730"))duty="0730";
-      if(!duty||duty==="A-Leave")continue;
+      if(!duty||duty==="A-Leave"||duty==="Leave")continue;
 
       rosterData[p.staffId][day]=duty;
       patternCells.add(key);
@@ -2269,7 +2274,7 @@ function handleSwapClick(staffId,day){
 function checkRoster(){
   const {startDay,endDay}=getCurrentPartDays(),staff=getVisibleRosterStaff(),officers=getOfficerStaff(),items=[];
   const add=(sev,day,text,id="")=>items.push({sev,day,text,id});
-  const isWork=v=>v&&v!=="OFF"&&v!=="A-Leave",dayLabel=d=>{const dt=dateForDay(d);return `${d} ${dt.toLocaleString("en",{month:"short"})}`};
+  const isWork=v=>v&&!isNonWorkDuty(v),dayLabel=d=>{const dt=dateForDay(d);return `${d} ${dt.toLocaleString("en",{month:"short"})}`};
   for(let day=startDay;day<=endDay;day++){
     if(officers.length){
       const duties=officers.map(s=>rosterData[s.id]?.[day]||"");
@@ -2553,7 +2558,7 @@ function getMonthInfo(){const year=Number(document.getElementById("yearInput").v
 function getCurrentPartDays(){const {lastDay}=getMonthInfo();return{startDay:Math.max(1,Math.min(rosterRangeStartDay,lastDay)),endDay:Math.max(1,Math.min(rosterRangeEndDay,lastDay))}}
 function dateForDay(day){const {year,month}=getMonthInfo();return new Date(year,month-1,day)}
 function isoForDay(day){const {year,month}=getMonthInfo();return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`}
-function isManualLocked(staffId,day){const duty=rosterData[staffId]?.[day]||"";return requestedCells.has(`${staffId}:${day}`)||((duty==="A-Leave"||duty==="OFF")&&!generatedCells.has(`${staffId}:${day}`))}
+function isManualLocked(staffId,day){const duty=rosterData[staffId]?.[day]||"";return requestedCells.has(`${staffId}:${day}`)||((isNonWorkDuty(duty))&&!generatedCells.has(`${staffId}:${day}`))}
 function applyFixedOfficerDays(officers,startDay,endDay){
   for(const s of officers){
     if(!rosterData[s.id])rosterData[s.id]={};
@@ -2624,8 +2629,8 @@ function restHoursBetween(prevDuty,currentDuty){
   return (currentStart-prevEnd)/60;
 }
 function isAllowedShiftChange(prevDuty,currentDuty){
-  if(!prevDuty||prevDuty==="OFF"||prevDuty==="A-Leave")return true;
-  if(!currentDuty||currentDuty==="OFF"||currentDuty==="A-Leave")return true;
+  if(!prevDuty||isNonWorkDuty(prevDuty))return true;
+  if(!currentDuty||isNonWorkDuty(currentDuty))return true;
   /* Shift-change rule: every working day still gets a duty. This only blocks
      a next-day duty when the gap between shifts is under 8 hours. Examples:
      0730 -> 0030 = allowed (9h); 1530/1630 -> 0030 = blocked;
@@ -2636,14 +2641,14 @@ function hasMinimumRest(id,duty,day){
   return isAllowedShiftChange(previousDuty(id,day),duty);
 }
 function manualDutyRestError(id,duty,day){
-  if(!duty||duty==="OFF"||duty==="A-Leave")return "";
+  if(!duty||isNonWorkDuty(duty))return "";
   const prev=rosterData[id]?.[day-1]||"";
-  if(prev&&prev!=="OFF"&&prev!=="A-Leave"){
+  if(prev&&!isNonWorkDuty(prev)){
     const rest=restHoursBetween(prev,duty);
     if(rest<8)return `Cannot set ${duty}. Only ${Math.max(0,rest).toFixed(1)} hours rest after previous duty ${prev}; minimum is 8 hours.`;
   }
   const next=rosterData[id]?.[day+1]||"";
-  if(next&&next!=="OFF"&&next!=="A-Leave"){
+  if(next&&!isNonWorkDuty(next)){
     const rest=restHoursBetween(duty,next);
     if(rest<8)return `Cannot set ${duty}. It leaves only ${Math.max(0,rest).toFixed(1)} hours rest before next duty ${next}; minimum is 8 hours.`;
   }
@@ -2811,7 +2816,7 @@ function validateDailyGroups(officers,day,issues){
   }
   for(const s of officers){
     const duty=rosterData[s.id]?.[day]||"",prev=previousDuty(s.id,day);
-    if(duty&&duty!=="OFF"&&duty!=="A-Leave"&&prev&&prev!=="OFF"&&prev!=="A-Leave"){
+    if(duty&&!isNonWorkDuty(duty)&&prev&&!isNonWorkDuty(prev)){
       const rest=restHoursBetween(prev,duty);
       if(Number.isFinite(rest)&&rest<8)issues.push(`${isoForDay(day)}: ${s.name} has only ${Math.max(0,rest).toFixed(1)} hours rest (${prev} → ${duty}). Minimum is 8 hours.`);
     }
@@ -2966,7 +2971,7 @@ async function allocateOfficerSpecialDuties(){
   const dutyAt=(id,day)=>day>=1?(rosterData[id]?.[day]||""):(startDay===1?(prev.roster[id]?.[prev.hi+day]||""):"");
   const count=(id,duty,until)=>Object.entries(rosterData[id]||{}).filter(([d,v])=>Number(d)<until&&v===duty).length;
   const total=(id,duty,day)=>(prior[duty][id]||0)+count(id,duty,day);
-  const restNext=(s,day)=>{const n=day<info.lastDay?(rosterData[s.id]?.[day+1]||""):"";return n==="OFF"||n==="A-Leave"||isDayOff(s.id,day+1)||(day<info.lastDay&&isStaffInLeave(s.id,day+1))};
+  const restNext=(s,day)=>{const n=day<info.lastDay?(rosterData[s.id]?.[day+1]||""):"";return isNonWorkDuty(n)||isDayOff(s.id,day+1)||(day<info.lastDay&&isStaffInLeave(s.id,day+1))};
   const eligible=(s,duty,day)=>{
     if(rosterData[s.id]?.[day])return false;
     if(!canAutoAssign(s,duty,day))return false;
@@ -3050,14 +3055,14 @@ async function offerPreviousPeriodOff(startDay,endDay,skipConfirm=false){
   setStatus("autoStatus",`${applied} previous-period OFF entries proposed for ${weekdays.size} staff (from ${prev.source}). You can edit OFF cells before generating.`,"info");
   return {applied,staff:weekdays.size,source:prev.source};
 }
-function autoCreateOfficers(fullMonth,customStartDay=null,customEndDay=null){readOfficerRulesFromUI();const officers=getOfficerStaff();if(!officers.length){setStatus("autoStatus","No Officers available for auto roster.","error");return}const {lastDay}=getMonthInfo();const part=getCurrentPartDays();const startDay=customStartDay??(fullMonth?1:part.startDay),endDay=customEndDay??(fullMonth?lastDay:part.endDay);if(!confirm(`Auto create Officers roster for days ${startDay}–${endDay}?\n\nManual OFF/A-Leave are preserved. Weekly OFF, Group A/B separation, Special Group coverage, Annual Leave periods and Special Requests will be applied. Auto rules: exactly 2 × 0830, exactly 2 × 1630 and exactly 1 × 0030 daily; all remaining Officers are balanced between 0730 and 1530 so Morning (0730+0830) and Afternoon (1530+1630) totals stay as close as possible; minimum 8 hours rest; prefer consecutive Morning/Afternoon duties; before OFF prefer 0730/Morning or 0030; after OFF allow only 1530/1630 with 1630 preferred; strongly rotate 0030, 0830 and 1630 fairly among Officers.`))return;const issues=[];applyFixedOfficerDays(officers,startDay,endDay);applyWeeklyOffToNonOfficers(startDay,endDay);applyFixedWeeklyPatterns(startDay,endDay);applyRequestedDuties(officers,startDay,endDay,issues);
+function autoCreateOfficers(fullMonth,customStartDay=null,customEndDay=null){readOfficerRulesFromUI();const officers=getOfficerStaff();if(!officers.length){setStatus("autoStatus","No Officers available for auto roster.","error");return}const {lastDay}=getMonthInfo();const part=getCurrentPartDays();const startDay=customStartDay??(fullMonth?1:part.startDay),endDay=customEndDay??(fullMonth?lastDay:part.endDay);if(!confirm(`Auto create Officers roster for days ${startDay}–${endDay}?\n\nManual OFF, A-Leave and Leave are preserved. Weekly OFF, Group A/B separation, Special Group coverage, Annual Leave periods and Special Requests will be applied. Auto rules: exactly 2 × 0830, exactly 2 × 1630 and exactly 1 × 0030 daily; all remaining Officers are balanced between 0730 and 1530 so Morning (0730+0830) and Afternoon (1530+1630) totals stay as close as possible; minimum 8 hours rest; prefer consecutive Morning/Afternoon duties; before OFF prefer 0730/Morning or 0030; after OFF allow only 1530/1630 with 1630 preferred; strongly rotate 0030, 0830 and 1630 fairly among Officers.`))return;const issues=[];applyFixedOfficerDays(officers,startDay,endDay);applyWeeklyOffToNonOfficers(startDay,endDay);applyFixedWeeklyPatterns(startDay,endDay);applyRequestedDuties(officers,startDay,endDay,issues);
 for(let day=startDay;day<=endDay;day++){
   for(const s of officers){
     const key=`${s.id}:${day}`,d=rosterData[s.id]?.[day]||"";
     // Auto Create rebuilds ordinary Officer working duties for the day.
     // Only Weekly OFF, Annual Leave, Fixed Pattern and Special Request cells stay protected.
     const protectedCell=isDayOff(s.id,day)||isStaffInLeave(s.id,day)||patternCells.has(key)||requestedCells.has(key);
-    if(!protectedCell&&d&&d!=="OFF"&&d!=="A-Leave"){delete rosterData[s.id][day];generatedCells.delete(key)}
+    if(!protectedCell&&d&&!isNonWorkDuty(d)){delete rosterData[s.id][day];generatedCells.delete(key)}
     // Officers never use 0800 or 1730, including old locally-saved values.
     if((rosterData[s.id]?.[day]==="0800"||rosterData[s.id]?.[day]==="1730")&&!requestedCells.has(key)){delete rosterData[s.id][day];patternCells.delete(key);generatedCells.delete(key)}
   }
@@ -3134,7 +3139,7 @@ for(let day=startDay;day<=endDay;day++){
   validateDailyGroups(officers,day,issues);
 }
 renderRoster();renderAutoStats(startDay,endDay);document.getElementById("autoIssues").innerHTML=issues.length?issues.map(x=>`<div class="issue">${esc(x)}</div>`).join(""):`<div class="okbox">Auto roster completed. Every available Officer was given a working duty except configured OFF/Annual Leave days; daily 2 × 0830, 2 × 1630 and 1 × 0030 were checked, and remaining Officers were balanced between 0730 and 1530 to keep Morning/Afternoon totals close, while 0030/0830/1630 were rotated as evenly as possible among Officers.</div>`;setStatus("autoStatus",`Auto roster created for ${startDay}–${endDay}. Review and edit any cell before saving.`,issues.length?"warn":"success")}
-function renderAutoStats(startDay,endDay){const officers=getOfficerStaff();document.getElementById("autoStats").innerHTML=officers.map(s=>{const c=staffCounts(s,startDay,endDay),days=[];for(let d=startDay;d<=endDay;d++)days.push(rosterData[s.id]?.[d]||"");return `<div class="stat-card"><b>${esc(s.rcNo)} · ${esc(s.name)}</b><br>Morning <b>${c.morning}</b> · Afternoon <b>${c.afternoon}</b> · 0030 <b>${c.night}</b> · OFF <b>${days.filter(x=>x==="OFF").length}</b> · A-Leave <b>${days.filter(x=>x==="A-Leave").length}</b></div>`}).join("")}
+function renderAutoStats(startDay,endDay){const officers=getOfficerStaff();document.getElementById("autoStats").innerHTML=officers.map(s=>{const c=staffCounts(s,startDay,endDay),days=[];for(let d=startDay;d<=endDay;d++)days.push(rosterData[s.id]?.[d]||"");return `<div class="stat-card"><b>${esc(s.rcNo)} · ${esc(s.name)}</b><br>Morning <b>${c.morning}</b> · Afternoon <b>${c.afternoon}</b> · 0030 <b>${c.night}</b> · OFF <b>${days.filter(x=>x==="OFF").length}</b> · A-Leave <b>${days.filter(x=>x==="A-Leave").length}</b> · Leave <b>${days.filter(x=>x==="Leave").length}</b></div>`}).join("")}
 function getRosterWorkingStaff(){
   const staff=getVisibleRosterStaff();
   if(rosterPrintMode||!temporaryRosterOrder.length)return staff;
@@ -3180,7 +3185,7 @@ function chooseDuty(duty){
     // 0030 = 1 Officer, 0830 = 2 Officers, 1630 = 2 Officers.
     // Group A / Group B conflict warning for ALL staff roles.
     // A and B may still be placed on the same exact duty, but only after confirmation.
-    if(groupsShareExactDuty(selectedStaff,duty,day)){
+    if(!isNonWorkDuty(duty)&&groupsShareExactDuty(selectedStaff,duty,day)){
       const myGroup=inGroup(staffId,"A")?"A":"B";
       const oppositeGroup=myGroup==="A"?"B":"A";
       const oppositeIds=autoConfig.groups?.[oppositeGroup]||[];
@@ -3619,12 +3624,12 @@ async function downloadRosterExcel(){
     ws.addRow([]); ws.addRow(headers); ws.addRow(weekdays);
     [4,5].forEach(r=>ws.getRow(r).eachCell(c=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF087983"}};c.alignment={horizontal:"center",vertical:"middle"};c.border={top:{style:"thin",color:{argb:"FFB8CACA"}},left:{style:"thin",color:{argb:"FFB8CACA"}},bottom:{style:"thin",color:{argb:"FFB8CACA"}},right:{style:"thin",color:{argb:"FFB8CACA"}}};}));
     const dutyColors={
-      "0730":"FFF7C928","0800":"FF48AA57","0830":"FF06A5AA","1530":"FF1767C7","1630":"FF7D27A3","1730":"FFEF7410","0030":"FFB51920","OFF":"FFB9B9B9","A-Leave":"FFD94F82"
+      "0730":"FFF7C928","0800":"FF48AA57","0830":"FF06A5AA","1530":"FF1767C7","1630":"FF7D27A3","1730":"FFEF7410","0030":"FFB51920","OFF":"FFB9B9B9","A-Leave":"FFD94F82","Leave":"FF9C6644"
     };
     const lightColors={
-      "0730":"FFFFF7A6","0800":"FFB6E7AD","0830":"FF8CE4E8","1530":"FF72BDF5","1630":"FFD49ADD","1730":"FFFFD08A","0030":"FFF27B78","OFF":"FFF0F0F0","A-Leave":"FFF8BBD0"
+      "0730":"FFFFF7A6","0800":"FFB6E7AD","0830":"FF8CE4E8","1530":"FF72BDF5","1630":"FFD49ADD","1730":"FFFFD08A","0030":"FFF27B78","OFF":"FFF0F0F0","A-Leave":"FFF8BBD0","Leave":"FFE6CCB2"
     };
-    const whiteText=new Set(["1530","1630","0030"]);
+    const whiteText=new Set(["1530","1630","0030","Leave"]);
     for(const st of staff){
       const vals=[Number(st.sortOrder)||"",st.rosterRole||"",st.name||"",st.rcNo||"",isSixHourStaff(st.id)?"Yes":"",...days.map(dt=>rosterData[st.id]?.[dt.getDate()]||"")];
       const row=ws.addRow(vals); row.height=19;
@@ -3644,10 +3649,10 @@ async function downloadRosterExcel(){
     rc.getCell(2,1).value="Roster Period";rc.getCell(2,1).font={bold:true};rc.mergeCells(2,2,2,1+days.length);rc.getCell(2,2).value=formatPrintRosterDate(range.from)+" to "+formatPrintRosterDate(range.to);
     rc.addRow([]); rc.addRow(["Duty",...days.map(d=>`${d.getDate()}-${d.toLocaleString("en",{month:"short"})}`)]);
     rc.getRow(4).eachCell(c=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF087983"}};c.alignment={horizontal:"center"};});
-    const dutyLabels=[...new Set([...DUTIES.filter(x=>x!=="A-Leave"&&x!=="OFF"),...DUTIES.filter(x=>x!=="A-Leave"&&x!=="OFF").map(x=>x+"-6h"),"OFF","A-Leave"])];
+    const dutyLabels=[...new Set([...DUTIES.filter(x=>!isNonWorkDuty(x)),...DUTIES.filter(x=>!isNonWorkDuty(x)).map(x=>x+"-6h"),"OFF","A-Leave","Leave"])];
     for(const label of dutyLabels){
       const six=label.endsWith("-6h"),base=six?label.slice(0,-3):label;
-      const vals=days.map(dt=>staff.filter(st=>{const duty=rosterData[st.id]?.[dt.getDate()]||"";if(duty!==base)return false;if(base==="OFF"||base==="A-Leave")return true;return isSixHourStaff(st.id)===six;}).map(st=>st.rcNo).filter(Boolean).join("\\"));
+      const vals=days.map(dt=>staff.filter(st=>{const duty=rosterData[st.id]?.[dt.getDate()]||"";if(duty!==base)return false;if(isNonWorkDuty(base))return true;return isSixHourStaff(st.id)===six;}).map(st=>st.rcNo).filter(Boolean).join("\\"));
       if(!vals.some(Boolean))continue;
       const row=rc.addRow([label,...vals]);
       row.eachCell(c=>{c.alignment={horizontal:"center",vertical:"middle",wrapText:true};c.border={top:{style:"thin",color:{argb:"FFD7E1E2"}},left:{style:"thin",color:{argb:"FFD7E1E2"}},bottom:{style:"thin",color:{argb:"FFD7E1E2"}},right:{style:"thin",color:{argb:"FFD7E1E2"}}};});
@@ -3727,7 +3732,7 @@ function updateAutoCreateRange(){
 }
 async function init(){initCollapsibleSettings();initSelectors();initRosterDateRange();await loadDutyConfig();updateAutoCreateRange();document.getElementById("monthSelect").addEventListener("change",async()=>{updateAutoCreateRange();await restoreRosterIdbToWorkingCache();loadRoster();ensurePreviousRosterHistory().catch(console.warn)});document.getElementById("yearInput").addEventListener("change",async()=>{updateAutoCreateRange();await restoreRosterIdbToWorkingCache();loadRoster();ensurePreviousRosterHistory().catch(console.warn)});await Promise.all([loadOfficerRules(),loadStaffSetup()]);loadGlobalLocal();renderAutoSetup();renderRequestUI();await restoreRosterIdbToWorkingCache();loadGlobalLocal();await loadRoster();ensurePreviousRosterHistory().catch(console.warn);document.addEventListener("change",scheduleLocalSave);document.addEventListener("input",scheduleLocalSave);document.addEventListener("click",e=>{if(e.target.closest("button"))scheduleLocalSave()});window.addEventListener("beforeunload",()=>saveRosterLocal(false))}
 // The editor opens only for a signed-in Supervisor or Admin.
-K.start({need:"manager",shell:false}).then(me=>{
+K.start({need:"manager"}).then(me=>{
   if(!me)return;
   init().then(()=>importPortalLeave(true)).catch(e=>{console.error(e);setStatus("rosterStatus","The editor could not start: "+(e.message||e),"error")});
 }).catch(e=>{document.body.insertAdjacentHTML("afterbegin",'<div style="padding:14px;background:#fff0ef;color:#9b1c14;font-weight:700">The editor could not start. '+String(e.message||e)+'</div>')});
@@ -3839,7 +3844,7 @@ function _weekBounds(day){
  return {a:Math.max(r.a,day-dow),b:Math.min(r.b,day+(6-dow))};
 }
 function _countStaffDuties(staffId,a,b){
- const c={0730:0,0830:0,0800:0,1530:0,1630:0,1730:0,0030:0,OFF:0,"A-Leave":0};
+ const c={0730:0,0830:0,0800:0,1530:0,1630:0,1730:0,0030:0,OFF:0,"A-Leave":0,Leave:0};
  for(let d=a;d<=b;d++){
    const x=rosterData[staffId]?.[d]||"";
    if(x)c[x]=(c[x]||0)+1;
@@ -3890,7 +3895,7 @@ function _smartNextDuty(staff,day){
  for(let d=day-1;d>=rangeForOff.a;d--){
    const x=rosterData[id]?.[d]||"";
    if(!x)break;
-   if(x==="OFF"||x==="A-Leave")break;
+   if(isNonWorkDuty(x))break;
    consecutiveWorkDays++;
  }
  if(consecutiveWorkDays>=6){
@@ -4133,7 +4138,7 @@ function updateDutyAdvisor(day,duty=""){
      ? dutyCountForRole(dutyAdvisorDay,duty,currentRole)
      : getVisibleRosterStaff().filter(s=>s.rosterRole===currentRole &&
          rosterData[s.id]?.[dutyAdvisorDay] &&
-         !["OFF","A-Leave"].includes(rosterData[s.id]?.[dutyAdvisorDay])).length;
+         !isNonWorkDuty(rosterData[s.id]?.[dutyAdvisorDay])).length;
    return `<tr><td>${esc(currentRole)}</td><td>${n}</td></tr>`;
  })() : `<tr><td colspan="2">Select a staff roster cell.</td></tr>`;
 
@@ -4151,7 +4156,7 @@ function updateDutyAdvisor(day,duty=""){
    staffAdvice.className="da-recommend"+(advice.duty==="OFF"?" da-danger":(advice.duty==="0030"?" da-warning":""));
    staffAdvice.innerHTML=`Recommended next duty: <b>${advice.duty}</b><br>${advice.reasons.join("<br>")}`;
 
-   const statDuties=["0730","0830","0800","1530","1630","1730","0030","OFF","A-Leave"];
+   const statDuties=["0730","0830","0800","1530","1630","1730","0030","OFF","A-Leave","Leave"];
    statsEl.innerHTML=statDuties
      .filter(x=>(pc[x]||0)>0 || ["0730","0830","1530","1630","0030","OFF"].includes(x))
      .map(x=>`<div class="da-duty-box">${x}<b>${pc[x]||0}</b></div>`).join("");
@@ -4908,6 +4913,7 @@ html body .check-panel{border-color:var(--k-line);border-radius:12px}
   html body .roster-table thead th,html body .roster-table thead th *{background:#fff!important;color:#000!important;-webkit-text-fill-color:#000!important;box-shadow:none!important}
   html body .roster-table .role-row td{background:#eee!important;text-transform:none}
   .rt-storage,#idbOverlay{display:none!important}
+  body>nav,body>header:not(.topbar),body>aside{display:none!important}
 }
 </style>
 
