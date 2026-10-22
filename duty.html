@@ -32,7 +32,7 @@
         <div class="note bad" id="limitNote" hidden></div>
         <div class="form-2">
           <label class="field"><span>Date of the swap</span><input type="date" id="date"></label>
-          <label class="field"><span>Swap with</span><input type="search" id="find" placeholder="Type a name" autocomplete="off"><select id="other" size="1"></select></label>
+          <label class="field"><span>Swap with</span><input type="search" id="find" placeholder="Type a name" autocomplete="off"><select id="other" size="1"></select><small id="roleHint"></small></label>
         </div>
         <div class="form-2">
           <label class="field"><span>Your duty that day</span><select id="myDuty"></select><small id="myHint"></small></label>
@@ -80,19 +80,40 @@
   id("myDuty").innerHTML = options; id("theirDuty").innerHTML = options;
   id("date").min = K.today(); id("date").value = K.today();
 
+  // Roster section for a person: the published roster's role for that month first,
+  // otherwise their Admin-page role mapped the same way the roster editor maps it.
+  function rosterCategory(role) {
+    const x = String(K.roleLabel(role || "") || role || "").trim().toLowerCase().replace(/[._-]+/g, " ").replace(/\s+/g, " ");
+    if (x.includes("admin")) return "Admin";
+    if (/\b(senior|snr|sr) exec/.test(x)) return "Snr. Executive";
+    if (/\bexec/.test(x)) return "Executive";
+    if (x.includes("supervisor") || x === "sup") return "Supervisor";
+    if (x === "hk" || x === "h k" || /house ?keep/.test(x)) return "HK";
+    return "Officers";
+  }
+  const portalRoleOf = personId => staff.find(s => String(s.id) === String(personId))?.role ?? (String(personId) === me.id ? me.role : "");
+  const roleIn = (personId, m) => m?.staff?.[personId]?.rosterRole || rosterCategory(portalRoleOf(personId));
+  async function rolesFor(aId, bId, date) {
+    let m = null; try { m = await K.rosterMonth(String(date).slice(0, 7)); } catch (_) {}
+    return [roleIn(aId, m), roleIn(bId, m)];
+  }
+
   function people() {
-    const q = id("find").value.trim().toLowerCase(), keep = id("other").value;
-    const list = staff.filter(s => s.id !== me.id && s.active !== false && (!q || s.name.toLowerCase().includes(q) || String(s.rcno).toLowerCase().includes(q)));
-    id("other").innerHTML = `<option value="">${list.length ? "Choose a colleague" : "No one matches"}</option>` + list.map(s => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.rcno)})</option>`).join("");
+    const q = id("find").value.trim().toLowerCase(), keep = id("other").value, myRole = roleIn(me.id, month);
+    const list = staff.filter(s => s.id !== me.id && s.active !== false && roleIn(s.id, month) === myRole && (!q || s.name.toLowerCase().includes(q) || String(s.rcno).toLowerCase().includes(q)));
+    id("roleHint").textContent = `Only staff in your role (${myRole}) are listed.`;
+    id("other").innerHTML = `<option value="">${list.length ? "Choose a colleague" : q ? "No one in your role matches" : "No one else is in your role"}</option>` + list.map(s => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.rcno)})</option>`).join("");
     if (list.some(s => s.id === keep)) id("other").value = keep; else if (q && list.length === 1) id("other").value = list[0].id;
   }
 
   // Fill both duties from the published roster for that date.
   async function fromRoster() {
-    const date = id("date").value, otherId = id("other").value;
+    const date = id("date").value;
     id("myHint").textContent = id("theirHint").textContent = "";
     if (!date) return;
     try { month = await K.rosterMonth(date.slice(0, 7)); } catch (_) { month = null; }
+    people();
+    const otherId = id("other").value;
     const day = Number(date.slice(8, 10));
     const set = (personId, select, hint) => {
       const code = month?.roster?.[personId]?.[day] || "";
@@ -109,9 +130,8 @@
     if (!date || !otherId || !mine || !theirs) return "Choose the date, your colleague and both duties.";
     if (date < K.today()) return "That date has already passed.";
     if (mine === theirs) return "Both of you have the same duty, so there is nothing to swap.";
-    const other = staff.find(s => s.id === otherId);
-    const a = month?.staff?.[me.id]?.rosterRole, b = month?.staff?.[otherId]?.rosterRole;
-    if (a && b ? a !== b : K.roleOf(other?.role) !== me.role) return `You can only swap with someone in the same role as you${a && b ? ` (${a})` : ""}.`;
+    const a = roleIn(me.id, month), b = roleIn(otherId, month);
+    if (a !== b) return `You can only swap with someone in the same role as you (${a}). This colleague is ${b}.`;
     if (date === K.today()) {
       const now = new Intl.DateTimeFormat("en-GB", { timeZone: "Indian/Maldives", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(":", "");
       const started = [mine, theirs].find(c => c !== "OFF" && c <= now);
@@ -172,7 +192,7 @@
     id("teamNote").textContent = K.isAdmin ? "Approve a swap after both staff have agreed." : "You can see this list. Only an Admin approves.";
     id("limitWrap").hidden = !K.isAdmin; id("limit").checked = settings.dutyLimit !== false;
     const rows = all.filter(r => filter === "all" || st(r) === "pending").sort((a, b) => filter === "pending" ? String(a.swapDate).localeCompare(String(b.swapDate)) : String(b.swapDate).localeCompare(String(a.swapDate)));
-    id("team").innerHTML = rows.map(r => `<div class="row${r.swapDate === today ? " today" : ""}"><div class="row-main"><b>${esc(r.requesterName)} and ${esc(r.acceptStaffName)}</b><span>${esc(describe(r))}${r.reason ? ". " + esc(r.reason) : ""}${stage(r) ? ". " + esc(stage(r)) : ""}${r.reviewedBy ? ". Answered by " + esc(r.reviewedBy) : ""}</span></div>
+    id("team").innerHTML = rows.map(r => `<div class="row${r.swapDate === today ? " today" : ""}"><div class="row-main"><b>${esc(r.requesterName)} and ${esc(r.acceptStaffName)}</b><span>${esc(describe(r))}${r.reason ? ". " + esc(r.reason) : ""}${stage(r) ? ". " + esc(stage(r)) : ""}${r.reviewedBy ? ". Answered by " + esc(r.reviewedBy) : ""}</span>${st(r) === "pending" && rosterCategory(portalRoleOf(r.requesterId)) !== rosterCategory(portalRoleOf(r.acceptStaffId)) ? `<span class="tag rejected" style="align-self:flex-start;margin-top:4px">Different roles</span>` : ""}</div>
       <div class="row-side">${K.tag(st(r))}${K.isAdmin && st(r) === "pending" ? `${r.staffAccepted ? `<button class="btn sm good" data-ok="${esc(r.id)}" type="button">Approve</button>` : ""}<button class="btn sm danger" data-rej="${esc(r.id)}" type="button">Reject</button>` : ""}${K.isAdmin ? `<button class="btn sm" data-del="${esc(r.id)}" type="button">Delete</button>` : ""}</div></div>`).join("")
       || `<div class="empty">${filter === "pending" ? "No duty changes are waiting." : "No duty changes yet."}</div>`;
     id("team").querySelectorAll("[data-ok]").forEach(b => b.onclick = () => K.busy(b, () => review(b.dataset.ok, "approved")));
@@ -193,6 +213,8 @@
   async function answer(requestId, yes) {
     const r = await fresh(requestId); if (!r) return;
     if (yes) {
+      const [a, b] = await rolesFor(r.requesterId, r.acceptStaffId, r.swapDate);
+      if (a !== b) return K.toast(`This swap is not allowed: ${r.requesterName} is ${a} and you are ${b}. Only staff in the same role can swap. Decline it instead.`, "bad");
       if (!(await K.confirm(`Agree to swap on ${K.fmt(r.swapDate)}? You will work ${r.requesterDuty} and ${r.requesterName} will work ${r.acceptStaffDuty}. Admin still has to approve.`, { ok: "Agree" }))) return;
       await K.db.collection("dutyChanges").doc(requestId).update({ staffAccepted: true, staffAcceptedAt: K.stamp() });
       await K.notify({ recipientIds: [r.requesterId], recipientRoles: ["admin"], title: "Duty change agreed", detail: `${me.name} agreed. ${describe(r)}. Waiting for Admin.`, url: "duty.html", type: "duty", sourceId: requestId, email: mail("agreed, waiting for Admin", r) });
@@ -216,6 +238,10 @@
 
   async function review(requestId, status) {
     const r = await fresh(requestId); if (!r) return;
+    if (status === "approved") {
+      const [a, b] = await rolesFor(r.requesterId, r.acceptStaffId, r.swapDate);
+      if (a !== b) return K.toast(`Cannot approve: ${r.requesterName} is ${a} and ${r.acceptStaffName} is ${b}. Only staff in the same role can swap. Reject it instead.`, "bad");
+    }
     let reviewReason = "";
     if (status === "rejected") { reviewReason = await K.ask("Why is this duty change rejected? Both staff will see this.", { ok: "Reject", title: "Reject duty change" }); if (reviewReason === null) return; }
     await K.db.collection("dutyChanges").doc(requestId).update({ status, reviewReason, reviewedBy: me.name, reviewedById: me.id, reviewedAt: K.stamp() });
