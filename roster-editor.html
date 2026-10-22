@@ -1563,6 +1563,9 @@ function restoreManualDutyDraft(){
     }
   }
 }
+// A cell the user set by hand (cell picker, Swap two duties or the Assistant).
+// Rule refreshes keep these; only Annual Leave and Weekly OFF still take priority.
+function manualDutyAt(staffId,day){return manualDutyDraft?.[staffId]?.[day]||""}
 function rememberManualDuty(staffId,day,duty){
   if(!manualDutyDraft[staffId])manualDutyDraft[staffId]={};
   if(duty)manualDutyDraft[staffId][day]=duty;else delete manualDutyDraft[staffId][day];
@@ -2038,7 +2041,7 @@ function getFixedPattern(id){return (autoConfig.fixedPatterns||[]).find(x=>x.sta
 function applyFixedWeeklyPatterns(startDay,endDay){
   for(const key of [...patternCells]){
     const [id,dayText]=key.split(":");const day=Number(dayText);
-    if(day>=startDay&&day<=endDay&&rosterData[id])delete rosterData[id][day];
+    if(day>=startDay&&day<=endDay&&rosterData[id]&&!manualDutyAt(id,day))delete rosterData[id][day];
     patternCells.delete(key);
   }
   const visible=getVisibleRosterStaff();
@@ -2060,6 +2063,7 @@ function applyFixedWeeklyPatterns(startDay,endDay){
       if(isStaffInLeave(p.staffId,day)){
         rosterData[p.staffId][day]="A-Leave";patternCells.add(key);generatedCells.delete(key);continue;
       }
+      if(manualDutyAt(p.staffId,day)){rosterData[p.staffId][day]=manualDutyAt(p.staffId,day);continue}   // hand-set cell wins over the pattern
       const dayName=DAY_NAMES[dateForDay(day).getDay()];
       let duty=p.days?.[dayName]||"";
       const patternStaff=visible.find(x=>x.id===p.staffId);
@@ -2545,10 +2549,10 @@ function updateRequestDateRange(){
   requestDateDefaultMonth=monthKey;
 }
 function renderRequestUI(){const list=document.getElementById("requestList");if(!list)return;const staff=getVisibleRosterStaff();clearStaffSearch("requestOfficer");const items=[];for(const s of staff){const req=getRule(s.id).requestedDuties||{};Object.keys(req).sort().forEach(date=>items.push(`<div class="request-chip"><span>${esc(s.rcNo)} · ${esc(s.name)} · ${esc(date)} · ${esc(req[date])}</span><button type="button" onclick="removeRequestedDuty('${esc(s.id)}','${esc(date)}')">×</button></div>`))}list.innerHTML=items.join("")||'<span class="muted">No requested duties entered.</span>';updateRequestDateRange()}
-function addRequestedDuty(){readOfficerRulesFromUI();const id=selectedStaffId("requestOfficer"),date=document.getElementById("requestDate").value,duty=document.getElementById("requestDuty").value;if(!id||!date||!duty){setStatus("autoStatus","Type and select a staff member, date and requested duty.","error");return}const r=getRule(id);if(!r.requestedDuties)r.requestedDuties={};r.requestedDuties[date]=duty;officerRules[id]=r;renderRequestUI();refreshOfficerRulesLive("Special Duty Request added and shown live in the roster. Saved locally.")}
+function addRequestedDuty(){readOfficerRulesFromUI();const id=selectedStaffId("requestOfficer"),date=document.getElementById("requestDate").value,duty=document.getElementById("requestDuty").value;if(!id||!date||!duty){setStatus("autoStatus","Type and select a staff member, date and requested duty.","error");return}const r=getRule(id);if(!r.requestedDuties)r.requestedDuties={};r.requestedDuties[date]=duty;officerRules[id]=r;{const {year,month}=getMonthInfo(),dd=Number(String(date).slice(8,10));if(String(date).startsWith(`${year}-${String(month).padStart(2,"0")}-`)&&manualDutyAt(id,dd))rememberManualDuty(id,dd,"")}renderRequestUI();refreshOfficerRulesLive("Special Duty Request added and shown live in the roster. Saved locally.")}
 function removeRequestedDuty(id,date){const r=getRule(id);const wasLeave=r.requestedDuties?.[date]==="A-Leave";if(r.requestedDuties)delete r.requestedDuties[date];if(wasLeave)clearRemovedLeaveCells({from:date,to:date,staffIds:[id]});officerRules[id]=r;renderRequestUI();refreshOfficerRulesLive("Special Duty Request removed and roster updated live.")}
 function getRequestedDuty(id,day){return getRule(id).requestedDuties?.[isoForDay(day)]||""}
-function applyRequestedDuties(staff,startDay,endDay,issues){requestedCells.clear();for(const s of staff){if(!rosterData[s.id])rosterData[s.id]={};for(let day=startDay;day<=endDay;day++){const duty=getRequestedDuty(s.id,day);if(!duty)continue;if((isStaffInLeave(s.id,day)&&duty!=="A-Leave")||(isDayOff(s.id,day)&&duty!=="OFF")){issues.push(`${isoForDay(day)}: requested ${duty} for ${s.rcNo} skipped because the staff member is on ${isDayOff(s.id,day)?"OFF":"A-Leave"}.`);continue}if(s.rosterRole==="Officers"&&duty==="1730"){issues.push(`${isoForDay(day)}: requested 1730 for ${s.rcNo} skipped because Officers do not use 1730.`);continue}if(duty==="0030"&&previousDuty(s.id,day)==="1530"){issues.push(`${isoForDay(day)}: requested 0030 for ${s.rcNo} skipped because previous duty is 1530.`);continue}rosterData[s.id][day]=duty;generatedCells.delete(`${s.id}:${day}`);requestedCells.add(`${s.id}:${day}`)}}}
+function applyRequestedDuties(staff,startDay,endDay,issues){requestedCells.clear();for(const s of staff){if(!rosterData[s.id])rosterData[s.id]={};for(let day=startDay;day<=endDay;day++){const duty=getRequestedDuty(s.id,day);if(!duty)continue;if((isStaffInLeave(s.id,day)&&duty!=="A-Leave")||(isDayOff(s.id,day)&&duty!=="OFF")){issues.push(`${isoForDay(day)}: requested ${duty} for ${s.rcNo} skipped because the staff member is on ${isDayOff(s.id,day)?"OFF":"A-Leave"}.`);continue}if(manualDutyAt(s.id,day)&&manualDutyAt(s.id,day)!==duty){rosterData[s.id][day]=manualDutyAt(s.id,day);continue}if(s.rosterRole==="Officers"&&duty==="1730"){issues.push(`${isoForDay(day)}: requested 1730 for ${s.rcNo} skipped because Officers do not use 1730.`);continue}if(duty==="0030"&&previousDuty(s.id,day)==="1530"){issues.push(`${isoForDay(day)}: requested 0030 for ${s.rcNo} skipped because previous duty is 1530.`);continue}rosterData[s.id][day]=duty;generatedCells.delete(`${s.id}:${day}`);requestedCells.add(`${s.id}:${day}`)}}}
 
 async function saveOfficerRules(){readOfficerRulesFromUI();captureAutoConfigFromUI(true);saveGlobalLocal();saveRosterLocal(false);setStatus("autoStatus","Annual Leave, Weekly OFF, Groups and Special Requests saved locally.","success")}
 function setPart(p){currentPart=p;updatePartButtons();renderRoster()}
@@ -2565,8 +2569,8 @@ function applyFixedOfficerDays(officers,startDay,endDay){
       const key=`${s.id}:${day}`;
       const presetOff=isDayOff(s.id,day);
       const current=rosterData[s.id]?.[day]||"";
-      // OFF is controlled ONLY by Weekly OFF. Remove every stale/manual/requested OFF on other days.
-      if(current==="OFF"&&!presetOff&&!carriedOffSet().has(key)){
+      // Remove OFF cells that no rule supports any more. A hand-set OFF and a carried-forward OFF stay.
+      if(current==="OFF"&&!presetOff&&!carriedOffSet().has(key)&&manualDutyAt(s.id,day)!=="OFF"){
         delete rosterData[s.id][day];
         generatedCells.delete(key);requestedCells.delete(key);patternCells.delete(key);
       }
@@ -3256,7 +3260,7 @@ function chooseDuty(duty){
       }
     }
   }
-  generatedCells.delete(`${staffId}:${day}`);requestedCells.delete(`${staffId}:${day}`);
+  generatedCells.delete(`${staffId}:${day}`);requestedCells.delete(`${staffId}:${day}`);patternCells.delete(`${staffId}:${day}`);
   // Keep manual cell entries in their own local-storage draft as well as the full roster draft.
   // This prevents rule refresh/re-render during page startup from wiping manual work.
   rememberManualDuty(staffId,day,duty);
