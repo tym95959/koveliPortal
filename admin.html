@@ -46,7 +46,7 @@
         <button class="btn primary" id="mSend" type="button">Send message</button>
       </div>
     </section>
-    <section class="panel"><div class="panel-head"><h2>Sent messages</h2></div><div class="rows" id="mHistory"></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Sent messages</h2><p id="mCount"></p></div><div class="btn-row"><button class="btn sm danger" id="mDelAll" type="button">Delete all sent</button><button class="btn sm" id="mClear" type="button">Clear inboxes…</button></div></div><div class="rows" id="mHistory"></div></section>
   </div>
 
   <!-- Email -->
@@ -214,11 +214,62 @@
   });
   async function history(force) {
     try {
-      const list = (await K.load.adminMessages(force === true)).sort((a, b) => K.millis(b.createdAt) - K.millis(a.createdAt)).slice(0, 30);
+      const all = (await K.load.adminMessages(force === true)).sort((a, b) => K.millis(b.createdAt) - K.millis(a.createdAt)), list = all.slice(0, 30);
+      id("mCount").textContent = all.length ? `${all.length} message${all.length === 1 ? "" : "s"}${all.length > 30 ? ", newest 30 shown" : ""}` : "";
+      id("mDelAll").disabled = !all.length;
       id("mHistory").innerHTML = list.map(m => `<div class="row"><div class="row-main"><b>${esc(m.title)}</b><span style="white-space:pre-wrap">${esc(m.detail)}</span><span>To ${esc(m.sourceId || "staff")}, ${esc(K.when(m.createdAt))}, by ${esc(m.actorName || "Admin")}</span></div><div class="row-side"><button class="btn sm danger" data-del="${esc(m.id)}" type="button">Remove</button></div></div>`).join("") || `<div class="empty">No messages sent yet.</div>`;
-      id("mHistory").querySelectorAll("[data-del]").forEach(b => b.onclick = () => K.busy(b, async () => { await K.db.collection("portalNotifications").doc(b.dataset.del).delete(); history(); }));
+      id("mHistory").querySelectorAll("[data-del]").forEach(b => b.onclick = () => K.busy(b, async () => { await K.db.collection("portalNotifications").doc(b.dataset.del).delete(); history(true); }));
     } catch (e) { id("mHistory").innerHTML = `<div class="empty">${esc(K.explain(e))}</div>`; }
   }
+
+  // ---- delete in bulk ----
+  // Deletes every document a query returns, 400 at a time (Firestore allows 500 per batch).
+  async function deleteAll(query, onProgress) {
+    let n = 0;
+    for (;;) {
+      const snap = await query.limit(400).get();
+      if (snap.empty) break;
+      const batch = K.db.batch();
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      n += snap.size; if (onProgress) onProgress(n);
+      if (snap.size < 400) break;
+    }
+    return n;
+  }
+  const notes = () => K.db.collection("portalNotifications");
+
+  id("mDelAll").onclick = () => K.busy(id("mDelAll"), async () => {
+    if (!(await K.confirm("Delete every message sent from this page? They disappear from everyone's inbox. This cannot be undone.", { ok: "Delete all sent", danger: true }))) return;
+    const n = await deleteAll(notes().where("type", "==", "admin-message"));
+    K.toast(n ? `${n} message${n === 1 ? "" : "s"} deleted.` : "There were no messages to delete.", "ok"); history(true);
+  });
+
+  id("mClear").onclick = () => {
+    const s = K.sheet({
+      title: "Clear inboxes",
+      html: `<p class="hint" style="margin-bottom:12px">This deletes messages from every staff member's inbox. Leave, annual leave and duty change records stay; only the inbox messages about them go.</p>
+        <div class="form">
+          <label class="check"><input type="radio" name="clr" value="old" checked> All messages older than <select id="clrDays" style="width:auto;display:inline-block;margin:0 4px"><option value="7">7</option><option value="30" selected>30</option><option value="90">90</option></select> days</label>
+          <label class="check"><input type="radio" name="clr" value="admin"> Admin messages only (sent from this page)</label>
+          <label class="check"><input type="radio" name="clr" value="all"> Every message, of every kind</label>
+          <p class="note" id="clrNote" hidden></p>
+        </div>`,
+      foot: `<button class="btn" data-no type="button">Cancel</button><button class="btn danger" data-go type="button">Delete</button>`
+    });
+    $("[data-no]", s.el).onclick = () => s.close();
+    const go = $("[data-go]", s.el);
+    go.onclick = () => K.busy(go, async () => {
+      const mode = $("input[name=clr]:checked", s.el).value, days = Number($("#clrDays", s.el).value);
+      const what = mode === "all" ? "every message in every inbox" : mode === "admin" ? "every Admin message" : `every message older than ${days} days`;
+      if (!(await K.confirm(`Delete ${what}? This cannot be undone.`, { ok: "Delete", danger: true }))) return;
+      const q = mode === "all" ? notes() : mode === "admin" ? notes().where("type", "==", "admin-message")
+        : notes().where("createdAt", "<", firebase.firestore.Timestamp.fromMillis(Date.now() - days * 86400000));
+      const note = $("#clrNote", s.el); note.hidden = false; note.className = "note"; note.textContent = "Deleting…";
+      const n = await deleteAll(q, k => { note.textContent = `Deleted ${k} so far…`; });
+      s.close(); K.toast(n ? `${n} message${n === 1 ? "" : "s"} deleted.` : "There was nothing to delete.", "ok"); history(true);
+    });
+  };
 
   // ---- emails ----
   const lines = v => [...new Set(String(v || "").split(/[\n,;]+/).map(x => x.trim().toLowerCase()).filter(Boolean))];
